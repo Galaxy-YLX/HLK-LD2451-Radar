@@ -63,6 +63,7 @@ private:
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* motionDirCombo_ = nullptr;
     QSpinBox* minSpeedSpin_ = nullptr;
+    QComboBox* triggerCombo_ = nullptr; // 累积有效触发次数（协议 §5.5，1~10 次）
     QComboBox* mirrorCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
@@ -75,10 +76,11 @@ private:
     QLabel* statusLabel_ = nullptr;
 
     QTimer* demoTimer_ = nullptr;
-    QTimer* paramsWriteTimer_ = nullptr; // 参数控件变化防抖，自动下发 0x0002
+    QTimer* paramsWriteTimer_ = nullptr; // 参数控件变化防抖，自动下发 0x0002 / 0x0003
     int demoStep_ = 0;
     int currentBaudRate_ = 0; // 当前实际通信波特率，用于判断是否需要下发设置
-    QByteArray targetParams_; // 0x0012 读回的 4 字节检测参数，写入时保留延迟项
+    QByteArray targetParams_;     // 0x0012 读回的 4 字节检测参数，写入时保留延迟项
+    QByteArray sensitivityParams_; // 0x0013 读回的 4 字节灵敏度参数，写入时保留阈值项
     bool suppressParamWrite_ = false; // 读取参数回同步控件时抑制自动下发
     bool autoReadParams_ = false;     // 握手/写入流程结束后自动重读参数刷新显示
     bool verifying_ = false;      // 连接握手：等待整条版本查询队列完成

@@ -94,7 +94,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     demoTimer_->setInterval(100);
     connect(demoTimer_, &QTimer::timeout, this, &MainWindow::onDemoTick);
 
-    // 参数控件改动后合并 300 ms 内的连续变化，再自动下发 0x0002
+    // 参数控件改动后合并 300 ms 内的连续变化，再自动下发 0x0002 / 0x0003
     paramsWriteTimer_ = new QTimer(this);
     paramsWriteTimer_->setSingleShot(true);
     paramsWriteTimer_->setInterval(300);
@@ -120,6 +120,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     minSpeedSpin_->setValue(0);
     minSpeedSpin_->setSuffix(tr(" km/h"));
     minSpeedSpin_->setToolTip(tr("速度门：最小运动速度，低于该值的目标被模块忽略；协议范围 0~120 km/h"));
+    triggerCombo_ = new QComboBox(this);
+    for (int n = 1; n <= 10; ++n) {
+        triggerCombo_->addItem(tr("%1 次").arg(n), n);
+    }
+    triggerCombo_->setToolTip(tr("协议 0x0003 第 1 字节：连续检测次数满足才上报报警（1~10 次）"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
@@ -156,6 +161,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     speedRow->addWidget(new QLabel(tr("速度门"), dockWidget));
     speedRow->addWidget(minSpeedSpin_, 1);
     dockLayout->addLayout(speedRow);
+    auto* triggerRow = new QHBoxLayout();
+    triggerRow->addWidget(new QLabel(tr("累积触发"), dockWidget));
+    triggerRow->addWidget(triggerCombo_, 1);
+    dockLayout->addLayout(triggerRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -207,6 +216,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         scheduleParamsWrite();
     });
     connect(minSpeedSpin_, &QSpinBox::valueChanged, this, [this](int) {
+        scheduleParamsWrite();
+    });
+    connect(triggerCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         scheduleParamsWrite();
     });
     connect(mirrorCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
@@ -305,7 +317,8 @@ void MainWindow::refreshPorts() {
 void MainWindow::onConnectClicked() {
     if (transport_->isOpen()) return;
     stopDemo();
-    targetParams_.clear(); // 新连接不沿用上一台设备的检测参数
+    targetParams_.clear();      // 新连接不沿用上一台设备的检测参数
+    sensitivityParams_.clear(); // 灵敏度参数同理
     paramsWriteTimer_->stop();
     suppressParamWrite_ = false;
     autoReadParams_ = false;
@@ -467,16 +480,30 @@ void MainWindow::applyParamsFromControls() {
     params[1] = static_cast<std::uint8_t>(motionDirCombo_->currentData().toInt());
     params[2] = static_cast<std::uint8_t>(minSpeedSpin_->value());
     // params[3] 无目标延迟：没有对应控件，保持读回的原值
-    if (!transport_->setTargetParams(params)) {
+
+    // 灵敏度参数（协议 §5.5）：仅当累积触发与读回值不同时才附带 0x0003，
+    // 信噪比阈值等级与两个扩展字节保持读回原值，两条写命令共用一条 ACK 队列。
+    std::vector<std::uint8_t> sensitivity;
+    const int trigger = triggerCombo_->currentData().toInt();
+    if (sensitivityParams_.size() >= 4 &&
+        trigger != static_cast<int>(static_cast<std::uint8_t>(sensitivityParams_.at(0)))) {
+        sensitivity.reserve(4);
+        for (int i = 0; i < 4; ++i) {
+            sensitivity.push_back(static_cast<std::uint8_t>(sensitivityParams_.at(i)));
+        }
+        sensitivity[0] = static_cast<std::uint8_t>(trigger);
+    }
+    if (!transport_->setParameters(params, sensitivity)) {
         if (transport_->isOpen() && deviceVerified_) {
             paramsWriteTimer_->start(); // 队列忙，稍后自动重试，避免改动丢失
         }
         return;
     }
-    setStatus(tr("正在写入检测参数：%1 m / %2 / %3 km/h…")
+    setStatus(tr("正在写入参数：%1 m / %2 / %3 km/h / 累积触发 %4 次…")
                   .arg(meters)
                   .arg(motionDirCombo_->currentText())
-                  .arg(minSpeedSpin_->value()));
+                  .arg(minSpeedSpin_->value())
+                  .arg(trigger));
 }
 
 void MainWindow::startDemo() {
@@ -611,7 +638,7 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("目标检测参数已读取"));
         break;
     }
-    case 0x0013: { // 灵敏度参数：继续逐行追加
+    case 0x0013: { // 灵敏度参数：继续逐行追加，并同步「累积触发」下拉
         if (payload.size() >= 2) {
             const QString current = paramsLabel_->text();
             const QString prefix = (current == tr("参数：--")) ? QString()
@@ -620,12 +647,22 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
                                                .arg(byte(0))
                                                .arg(byte(1)));
         }
+        if (payload.size() >= 4) {
+            sensitivityParams_ = payload.left(4);
+            const int idx = triggerCombo_->findData(static_cast<int>(byte(0)));
+            if (idx >= 0) {
+                suppressParamWrite_ = true; // 回同步控件不应触发新的下发
+                triggerCombo_->setCurrentIndex(idx);
+                suppressParamWrite_ = false;
+            }
+        }
         setStatus(tr("灵敏度参数已读取"));
         break;
     }
     case 0x0002:
+    case 0x0003:
         autoReadParams_ = true; // 写入队列结束后自动回读，刷新参数显示
-        setStatus(tr("检测参数已写入，正在回读刷新…"));
+        setStatus(tr("参数已写入，正在回读刷新…"));
         break;
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
         setStatus(verifying_ ? tr("正在校验设备：配置模式已使能…")

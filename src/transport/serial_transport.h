@@ -48,6 +48,12 @@ public:
     // 修改目标检测参数（协议 §5.3）：使能配置 → 0x0002(4B) → 结束配置。
     bool setTargetParams(const std::vector<std::uint8_t>& params4);
 
+    // 同一条配置流程里写「检测参数(§5.3) + 灵敏度参数(§5.5)」：
+    // 使能配置 → 0x0002 → [0x0003] → 结束配置，避免两条 ACK 队列互相打断。
+    // sensitivity4 为空时只写检测参数。
+    bool setParameters(const std::vector<std::uint8_t>& target4,
+                       const std::vector<std::uint8_t>& sensitivity4 = {});
+
     // 修改模块波特率（协议 §5.8）：使能配置 → 0x00A1 → 重启模块使其生效，
     // 全部 ACK 成功后延时切换本地串口波特率，并发出 baudRateChanged。
     bool setBaudRate(int baudRate);

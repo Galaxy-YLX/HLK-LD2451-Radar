@@ -188,12 +188,22 @@ bool SerialTransport::queryParameters() {
 }
 
 bool SerialTransport::setTargetParams(const std::vector<std::uint8_t>& params4) {
-    if (params4.size() != 4 || !serial_.isOpen()) return false;
-    return startSequence({
-        {cmd(Command::EnableConfig), {0x01, 0x00}},
-        {cmd(Command::SetTargetParams), params4},
-        {cmd(Command::EndConfig), {}},
-    });
+    return setParameters(params4, {});
+}
+
+bool SerialTransport::setParameters(const std::vector<std::uint8_t>& target4,
+                                    const std::vector<std::uint8_t>& sensitivity4) {
+    if (target4.size() != 4 || (!sensitivity4.empty() && sensitivity4.size() != 4) ||
+        !serial_.isOpen()) return false;
+    std::vector<CommandStep> steps;
+    steps.reserve(4);
+    steps.push_back({cmd(Command::EnableConfig), {0x01, 0x00}});
+    steps.push_back({cmd(Command::SetTargetParams), target4});
+    if (!sensitivity4.empty()) {
+        steps.push_back({cmd(Command::SetSensitivity), sensitivity4});
+    }
+    steps.push_back({cmd(Command::EndConfig), {}});
+    return startSequence(std::move(steps));
 }
 
 bool SerialTransport::setBaudRate(int baudRate) {
