@@ -40,11 +40,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         baudCombo_->addItem(QString::number(b), b);
     }
     baudCombo_->setCurrentText(QStringLiteral("460800"));
+    baudCombo_->setToolTip(tr("连接时作为本地波特率；连接后改选并点「应用」可同步修改模块波特率"));
 
     connectButton_ = new QPushButton(tr("连接"), this);
     disconnectButton_ = new QPushButton(tr("断开"), this);
     disconnectButton_->setEnabled(false);
     auto* refreshButton = new QPushButton(tr("刷新"), this);
+    applyBaudButton_ = new QPushButton(tr("应用"), this);
+    applyBaudButton_->setToolTip(tr("把当前选中的波特率写入模块并重启，随后软件本地同步切换"));
 
     sizeCombo_ = new QComboBox(this);
     for (double r : {2.0, 3.0, 4.0, 6.0, 8.0}) {
@@ -67,6 +70,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolbar->addWidget(refreshButton);
     toolbar->addWidget(connectButton_);
     toolbar->addWidget(disconnectButton_);
+    toolbar->addWidget(applyBaudButton_);
     toolbar->addSeparator();
 
     QFont barFont = toolbar->font();
@@ -100,15 +104,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
     rangeCombo_->setToolTip(tr("视图量程（半径），协议距离上限 100 m"));
 
-    targetBaudCombo_ = new QComboBox(this);
-    const int targetBauds[] = {9600, 19200, 38400, 57600, 115200, 230400, 256000, 460800};
-    for (int b : targetBauds) {
-        targetBaudCombo_->addItem(QString::number(b), b);
-    }
-    targetBaudCombo_->setCurrentText(QStringLiteral("460800"));
-    applyBaudButton_ = new QPushButton(tr("应用"), this);
-    applyBaudButton_->setToolTip(tr("使能配置 → 设置波特率 → 重启模块，随后软件本地同步切换"));
-
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
     vectorTimeSpin_ = new QDoubleSpinBox(this);
@@ -137,12 +132,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* dockLayout = new QVBoxLayout(dockWidget);
     dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
     dockLayout->addWidget(rangeCombo_);
-    dockLayout->addSpacing(10);
-    dockLayout->addWidget(new QLabel(tr("模块波特率"), dockWidget));
-    auto* baudRow = new QHBoxLayout();
-    baudRow->addWidget(targetBaudCombo_, 1);
-    baudRow->addWidget(applyBaudButton_);
-    dockLayout->addLayout(baudRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -227,6 +216,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                 onAck(cmd, ok, payload);
             });
     connect(transport_, &SerialTransport::baudRateChanged, this, [this](int baud) {
+        currentBaudRate_ = baud;
         const int idx = baudCombo_->findData(baud);
         if (idx >= 0) baudCombo_->setCurrentIndex(idx);
         setStatus(tr("波特率已同步为 %1").arg(baud));
@@ -275,7 +265,7 @@ void MainWindow::onConnectClicked() {
     const int baud = baudCombo_->currentData().toInt();
     if (transport_->open(port, baud)) {
         setConnectedUi(true);
-        targetBaudCombo_->setCurrentIndex(baudCombo_->currentIndex());
+        currentBaudRate_ = baud;
         setStatus(tr("已连接 %1 @ %2").arg(port).arg(baud));
     } else {
         setStatus(tr("打开失败：%1").arg(transport_->errorString()));
@@ -285,6 +275,7 @@ void MainWindow::onConnectClicked() {
 void MainWindow::onDisconnectClicked() {
     transport_->close();
     setConnectedUi(false);
+    currentBaudRate_ = 0;
     setStatus(tr("已断开"));
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
@@ -302,9 +293,8 @@ void MainWindow::onQueryParamsClicked() {
 
 void MainWindow::onApplyBaudClicked() {
     if (!transport_->isOpen()) return;
-    const int target = targetBaudCombo_->currentData().toInt();
-    const int current = baudCombo_->currentData().toInt();
-    if (target == current) {
+    const int target = baudCombo_->currentData().toInt();
+    if (target == currentBaudRate_) {
         setStatus(tr("模块已是 %1，无需修改").arg(target));
         return;
     }

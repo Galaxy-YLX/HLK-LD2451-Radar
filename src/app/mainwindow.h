@@ -51,11 +51,10 @@ private:
     QComboBox* baudCombo_ = nullptr;
     QPushButton* connectButton_ = nullptr;
     QPushButton* disconnectButton_ = nullptr;
+    QPushButton* applyBaudButton_ = nullptr;
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
-    QComboBox* targetBaudCombo_ = nullptr;
-    QPushButton* applyBaudButton_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
@@ -68,6 +67,7 @@ private:
 
     QTimer* demoTimer_ = nullptr;
     int demoStep_ = 0;
+    int currentBaudRate_ = 0; // 当前实际通信波特率，用于判断是否需要下发设置
     QElapsedTimer fpsTimer_;
     int frameCounter_ = 0;
     double fps_ = 0.0;
