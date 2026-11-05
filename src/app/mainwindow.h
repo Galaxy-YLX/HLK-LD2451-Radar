@@ -35,6 +35,7 @@ private slots:
     void onQueryVersionClicked();
     void onQueryParamsClicked();
     void onApplyBaudClicked();
+    void onApplyRangeClicked();
     void onDemoTick();
 
 private:
@@ -54,6 +55,7 @@ private:
     QPushButton* applyBaudButton_ = nullptr;
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
+    QPushButton* applyRangeButton_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
@@ -68,6 +70,7 @@ private:
     QTimer* demoTimer_ = nullptr;
     int demoStep_ = 0;
     int currentBaudRate_ = 0; // 当前实际通信波特率，用于判断是否需要下发设置
+    QByteArray targetParams_; // 0x0012 读回的 4 字节检测参数，写入时保留其余三项
     bool verifying_ = false;      // 连接握手：等待固件版本 ACK
     bool deviceVerified_ = false; // 已通过固件版本校验，设备确认为 LD2451
     QElapsedTimer fpsTimer_;

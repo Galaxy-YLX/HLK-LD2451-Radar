@@ -143,6 +143,15 @@ bool SerialTransport::queryParameters() {
     });
 }
 
+bool SerialTransport::setTargetParams(const std::vector<std::uint8_t>& params4) {
+    if (params4.size() != 4 || !serial_.isOpen()) return false;
+    return startSequence({
+        {Command::EnableConfig, {0x01, 0x00}},
+        {Command::SetTargetParams, params4},
+        {Command::EndConfig, {}},
+    });
+}
+
 bool SerialTransport::setBaudRate(int baudRate) {
     const int index = baudIndex(baudRate);
     if (index == 0 || !serial_.isOpen()) return false;

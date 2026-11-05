@@ -41,6 +41,9 @@ public:
     bool queryFirmwareVersion();
     bool queryParameters();
 
+    // 修改目标检测参数（协议 §5.3）：使能配置 → 0x0002(4B) → 结束配置。
+    bool setTargetParams(const std::vector<std::uint8_t>& params4);
+
     // 修改模块波特率（协议 §5.8）：使能配置 → 0x00A1 → 重启模块使其生效，
     // 全部 ACK 成功后延时切换本地串口波特率，并发出 baudRateChanged。
     bool setBaudRate(int baudRate);

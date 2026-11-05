@@ -143,6 +143,12 @@ int main() {
         auto baud = buildCommand(static_cast<std::uint16_t>(Command::SetBaudRate), {0x07, 0x00});
         auto expectedBaud = hexBytes("FD FC FB FA 04 00 A1 00 07 00 04 03 02 01");
         CHECK(baud == expectedBaud, "set-baud command frame mismatch");
+
+        // 协议 §5.3：最远 100 m / 只检测靠近 / 最小 5 km/h / 延迟 2 s
+        auto tp = buildCommand(static_cast<std::uint16_t>(Command::SetTargetParams),
+                               {0x64, 0x01, 0x05, 0x02});
+        auto expectedTp = hexBytes("FD FC FB FA 06 00 02 00 64 01 05 02 04 03 02 01");
+        CHECK(tp == expectedTp, "set-target-params command frame mismatch");
     }
 
     // 5. ACK 帧解析（协议 §5.7 固件版本；文档长度字段 0x0B 疑为笔误，此处按实际 12 字节构造）

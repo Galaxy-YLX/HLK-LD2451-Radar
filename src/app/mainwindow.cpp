@@ -14,6 +14,8 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 #include "transport/serial_transport.h"
 #include "ui/radar_view.h"
@@ -99,7 +101,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         rangeCombo_->addItem(tr("%1 m").arg(m), m * 1.0);
     }
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
-    rangeCombo_->setToolTip(tr("视图量程（半径），协议距离上限 100 m"));
+    rangeCombo_->setToolTip(tr("既是视图量程（半径），也对应模块最远检测距离；协议上限 100 m"));
+    applyRangeButton_ = new QPushButton(tr("应用"), this);
+    applyRangeButton_->setToolTip(tr("把当前量程写入模块最远检测距离；需先点「读取参数」以保留其它三项配置"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
@@ -126,8 +130,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setTitleBarWidget(new QWidget(controlDock));
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
-    dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
-    dockLayout->addWidget(rangeCombo_);
+    dockLayout->addWidget(new QLabel(tr("量程 / 最远距离"), dockWidget));
+    auto* rangeRow = new QHBoxLayout();
+    rangeRow->addWidget(rangeCombo_, 1);
+    rangeRow->addWidget(applyRangeButton_);
+    dockLayout->addLayout(rangeRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -168,6 +175,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(versionButton_, &QPushButton::clicked, this, &MainWindow::onQueryVersionClicked);
     connect(paramsButton_, &QPushButton::clicked, this, &MainWindow::onQueryParamsClicked);
     connect(applyBaudButton_, &QPushButton::clicked, this, &MainWindow::onApplyBaudClicked);
+    connect(applyRangeButton_, &QPushButton::clicked, this, &MainWindow::onApplyRangeClicked);
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setPointRadius(sizeCombo_->currentData().toDouble());
     });
@@ -234,6 +242,7 @@ void MainWindow::setConnectedUi(bool connected) {
     versionButton_->setEnabled(connected);
     paramsButton_->setEnabled(connected);
     applyBaudButton_->setEnabled(connected);
+    applyRangeButton_->setEnabled(connected);
 }
 
 void MainWindow::setStatus(const QString& text, bool alarm) {
@@ -260,6 +269,7 @@ void MainWindow::refreshPorts() {
 void MainWindow::onConnectClicked() {
     if (transport_->isOpen()) return;
     stopDemo();
+    targetParams_.clear(); // 新连接不沿用上一台设备的检测参数
     const QString port = portCombo_->currentText().trimmed();
     if (port.isEmpty()) {
         setStatus(tr("请先选择串口"));
@@ -334,6 +344,24 @@ void MainWindow::onApplyBaudClicked() {
     setStatus(transport_->setBaudRate(target)
                   ? tr("正在设置模块波特率为 %1…").arg(target)
                   : tr("不支持该波特率或流程进行中"));
+}
+
+void MainWindow::onApplyRangeClicked() {
+    if (!transport_->isOpen()) return;
+    if (targetParams_.size() < 4) {
+        setStatus(tr("请先点「读取参数」获取当前配置"));
+        return;
+    }
+    const int meters = rangeCombo_->currentData().toInt();
+    std::vector<std::uint8_t> params;
+    params.reserve(4);
+    for (int i = 0; i < 4; ++i) {
+        params.push_back(static_cast<std::uint8_t>(targetParams_.at(i)));
+    }
+    params[0] = static_cast<std::uint8_t>(meters); // 只替换最远检测距离，其余三项保持不变
+    setStatus(transport_->setTargetParams(params)
+                  ? tr("正在写入最远检测距离 %1 m…").arg(meters)
+                  : tr("命令发送失败或流程进行中"));
 }
 
 void MainWindow::startDemo() {
@@ -454,6 +482,19 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
                                       .arg(dir)
                                       .arg(byte(2))
                                       .arg(byte(3)));
+            targetParams_ = payload.left(4);
+            // 量程与模块最远距离对应：同步到最接近的档位，同时触发视图量程更新
+            int bestIdx = -1;
+            int bestDiff = 1000;
+            for (int i = 0; i < rangeCombo_->count(); ++i) {
+                const int diff =
+                    std::abs(rangeCombo_->itemData(i).toInt() - static_cast<int>(byte(0)));
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx >= 0) rangeCombo_->setCurrentIndex(bestIdx);
         }
         setStatus(tr("目标检测参数已读取"));
         break;
@@ -470,6 +511,9 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("灵敏度参数已读取"));
         break;
     }
+    case 0x0002:
+        setStatus(tr("最远检测距离已写入，可点「读取参数」确认"));
+        break;
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
         setStatus(verifying_ ? tr("正在校验设备：配置模式已使能…")
                              : tr("配置模式已使能，等待查询…"));
