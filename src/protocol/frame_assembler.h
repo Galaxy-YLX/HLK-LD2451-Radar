@@ -18,10 +18,16 @@ public:
 
     explicit FrameAssembler(FrameCallback onFrame) : onFrame_(std::move(onFrame)) {}
 
+    // 缓冲区上限：波特率错误时串口会持续送来无法成帧的乱码，避免无界增长
+    static constexpr std::size_t kMaxBufferSize = 4096;
+
     // 喂入一段字节，可能触发 0 次或多次 onFrame 回调。
     void push(const std::uint8_t* data, std::size_t len);
 
     void reset() { buf_.clear(); }
+
+    // 当前未消费的字节数（诊断 / 单测用）
+    std::size_t bufferedBytes() const { return buf_.size(); }
 
 private:
     FrameCallback onFrame_;

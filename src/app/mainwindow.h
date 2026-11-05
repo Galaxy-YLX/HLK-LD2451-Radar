@@ -5,6 +5,7 @@
 #include <QMainWindow>
 
 #include <memory>
+#include <vector>
 
 #include "core/scan.h"
 
@@ -44,7 +45,10 @@ private:
     void setStatus(const QString& text, bool alarm = false);
     void updateTargetTable(const std::shared_ptr<Scan>& scan);
     void onAck(quint16 command, bool success, const QByteArray& payload);
+    void onSequenceFinished();
+    bool openAndVerify(const QString& port, int baud);
     void onVerifyFailed(const QString& reason);
+    void finalizeFailure(const QString& reason);
     void scheduleParamsWrite();
     void applyParamsFromControls();
 
@@ -77,9 +81,10 @@ private:
     QByteArray targetParams_; // 0x0012 读回的 4 字节检测参数，写入时保留延迟项
     bool suppressParamWrite_ = false; // 读取参数回同步控件时抑制自动下发
     bool autoReadParams_ = false;     // 握手/写入流程结束后自动重读参数刷新显示
-    bool verifying_ = false;      // 连接握手：等待固件版本 ACK
+    bool verifying_ = false;      // 连接握手：等待整条版本查询队列完成
     bool deviceVerified_ = false; // 已通过固件版本校验，设备确认为 LD2451
-    int verifyRetriesLeft_ = 0;   // 握手失败时的剩余重试次数
+    std::vector<int> baudCandidates_; // 握手无响应时自动尝试的其它波特率
+    int requestedBaudRate_ = 0;       // 用户最初选择的波特率
     QElapsedTimer fpsTimer_;
     int frameCounter_ = 0;
     double fps_ = 0.0;

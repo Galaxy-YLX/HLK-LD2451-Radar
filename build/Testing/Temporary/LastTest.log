@@ -1,10 +1,10 @@
-Start testing: Nov 05 20:20 CST
+Start testing: Nov 05 23:30 CST
 ----------------------------------------------------------
-1/1 Testing: parser_tests
-1/1 Test: parser_tests
+1/2 Testing: parser_tests
+1/2 Test: parser_tests
 Command: "/home/yun/Documents/HLK-LD2451-Radar/build/parser_tests"
 Directory: /home/yun/Documents/HLK-LD2451-Radar/build
-"parser_tests" start time: Nov 05 20:20 CST
+"parser_tests" start time: Nov 05 23:30 CST
 Output:
 ----------------------------------------------------------
 All parser tests passed.
@@ -12,8 +12,24 @@ All parser tests passed.
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"parser_tests" end time: Nov 05 20:20 CST
+"parser_tests" end time: Nov 05 23:30 CST
 "parser_tests" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Nov 05 20:20 CST
+2/2 Testing: stream_tests
+2/2 Test: stream_tests
+Command: "/home/yun/Documents/HLK-LD2451-Radar/build/stream_tests"
+Directory: /home/yun/Documents/HLK-LD2451-Radar/build
+"stream_tests" start time: Nov 05 23:30 CST
+Output:
+----------------------------------------------------------
+All stream/sequencer tests passed.
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"stream_tests" end time: Nov 05 23:30 CST
+"stream_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 05 23:30 CST

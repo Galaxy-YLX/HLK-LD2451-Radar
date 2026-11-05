@@ -14,12 +14,16 @@ add_library(ld2451_core STATIC
 target_include_directories(ld2451_core PUBLIC src)
 
 # ---------------------------------------------------------------------------
-# 单元测试（用协议文档第 7 节的实例帧做基准）
+# 单元测试：协议文档实例帧 + 真实串口样本回放 + ACK 队列状态机（均无需硬件）
 # ---------------------------------------------------------------------------
 enable_testing()
 add_executable(parser_tests tests/parser_test.cpp)
 target_link_libraries(parser_tests PRIVATE ld2451_core)
 add_test(NAME parser_tests COMMAND parser_tests)
+
+add_executable(stream_tests tests/stream_test.cpp)
+target_link_libraries(stream_tests PRIVATE ld2451_core)
+add_test(NAME stream_tests COMMAND stream_tests)
 
 # ---------------------------------------------------------------------------
 # Qt 上位机应用

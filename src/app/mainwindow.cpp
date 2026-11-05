@@ -253,25 +253,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (idx >= 0) baudCombo_->setCurrentIndex(idx);
         setStatus(tr("波特率已同步为 %1").arg(baud));
     });
+    // 整条握手队列（含结束配置）全部 ACK 成功，才确认设备可用
+    connect(transport_, &SerialTransport::sequenceFinished, this,
+            &MainWindow::onSequenceFinished);
+    connect(transport_, &SerialTransport::portLost, this,
+            [this](const QString& msg) {
+                onDisconnectClicked();
+                setStatus(tr("串口连接已丢失：%1").arg(msg), true);
+            });
     connect(transport_, &SerialTransport::frameError, this,
             [this](const QString& msg) {
-                if (!verifying_) {
-                    setStatus(msg);
+                // 传输层已对单条命令快速重发；仍失败则换下一个候选波特率重试
+                if (verifying_) {
+                    onVerifyFailed(msg);
                     return;
                 }
-                // 模块刚上电时偶发丢 ACK，握手阶段允许重试一次再判连接失败
-                if (verifyRetriesLeft_ > 0) {
-                    --verifyRetriesLeft_;
-                    setStatus(tr("校验未响应，正在重试…（%1）").arg(msg));
-                    QTimer::singleShot(150, this, [this, msg] {
-                        if (!verifying_ || !transport_->isOpen()) return;
-                        if (!transport_->queryFirmwareVersion()) {
-                            onVerifyFailed(msg);
-                        }
-                    });
-                    return;
-                }
-                onVerifyFailed(msg);
+                autoReadParams_ = false; // 队列失败，丢弃挂起的自动回读
+                setStatus(msg);
             });
 }
 
@@ -317,17 +315,25 @@ void MainWindow::onConnectClicked() {
         return;
     }
     const int baud = baudCombo_->currentData().toInt();
-    if (!transport_->open(port, baud)) {
-        setStatus(tr("打开失败：%1").arg(transport_->errorString()), true);
-        return;
+    requestedBaudRate_ = baud;
+    // 实测模块可能已被切到 460800，也可能仍是出厂 115200；按常见度自动回退
+    baudCandidates_.clear();
+    for (int b : {115200, 460800, 256000, 230400}) {
+        if (b != baud) baudCandidates_.push_back(b);
     }
+    openAndVerify(port, baud);
+}
 
-    // 握手：串口打开只代表物理连通，需拿到固件版本 ACK 才确认是 LD2451
+bool MainWindow::openAndVerify(const QString& port, int baud) {
+    // 串口打开后立即发起握手：实测 0 ms 延时即可正常应答，固定等 400 ms 纯属浪费
+    if (!transport_->open(port, baud)) {
+        baudCandidates_.clear();
+        finalizeFailure(tr("打开失败：%1").arg(transport_->errorString()));
+        return false;
+    }
     currentBaudRate_ = baud;
     deviceVerified_ = false;
     verifying_ = true;
-    verifyRetriesLeft_ = 1;
-    transport_->setAckTimeout(2000); // 模块上电就绪慢，握手阶段放宽 ACK 超时
     setConnectedUi(true);
     versionButton_->setEnabled(false);
     paramsButton_->setEnabled(false);
@@ -337,19 +343,38 @@ void MainWindow::onConnectClicked() {
     versionLabel_->adjustSize();
     paramsLabel_->adjustSize();
     setStatus(tr("已打开 %1 @ %2，正在校验设备…").arg(port).arg(baud));
-    // 延时等待 USB 枚举/模块启动稳定后再发第一条命令
-    QTimer::singleShot(400, this, [this] {
+    QTimer::singleShot(0, this, [this] {
         if (!verifying_ || !transport_->isOpen()) return;
         if (!transport_->queryFirmwareVersion()) {
             onVerifyFailed(tr("无法发起版本查询"));
+        }
+    });
+    return true;
+}
+
+void MainWindow::onSequenceFinished() {
+    if (!verifying_) return;
+    // 只有整条「使能配置 → 读取版本 → 结束配置」都成功才算连接成功，
+    // 避免结束配置失败时模块停留在配置模式、界面却显示已连接。
+    verifying_ = false;
+    deviceVerified_ = true;
+    autoReadParams_ = false;
+    baudCandidates_.clear();
+    setConnectedUi(true);
+    const int idx = baudCombo_->findData(currentBaudRate_);
+    if (idx >= 0) baudCombo_->setCurrentIndex(idx);
+    setStatus(tr("设备校验通过 · %1").arg(versionLabel_->text()));
+    QTimer::singleShot(0, this, [this] {
+        if (!transport_->isOpen() || !deviceVerified_) return;
+        if (!transport_->queryParameters()) {
+            setStatus(tr("参数回读未启动，请手动点「读取参数」"));
         }
     });
 }
 
 void MainWindow::onDisconnectClicked() {
     transport_->close();
-    transport_->setAckTimeout(1000);
-    verifyRetriesLeft_ = 0;
+    baudCandidates_.clear();
     setConnectedUi(false);
     currentBaudRate_ = 0;
     verifying_ = false;
@@ -364,20 +389,39 @@ void MainWindow::onDisconnectClicked() {
 
 void MainWindow::onVerifyFailed(const QString& reason) {
     if (!verifying_) return;
+    transport_->close();
+    if (!baudCandidates_.empty()) {
+        const int tried = currentBaudRate_;
+        const int next = baudCandidates_.front();
+        baudCandidates_.erase(baudCandidates_.begin());
+        setStatus(tr("%1 无响应（%2），正在尝试 %3…").arg(tried).arg(reason).arg(next));
+        // 延迟一轮事件循环：frameError 可能来自组帧器回调栈内，避免在那里重开串口
+        QTimer::singleShot(0, this, [this, next] {
+            if (!verifying_) return;
+            openAndVerify(portCombo_->currentText().trimmed(), next);
+        });
+        return;
+    }
+    finalizeFailure(reason);
+}
+
+void MainWindow::finalizeFailure(const QString& reason) {
     verifying_ = false;
     deviceVerified_ = false;
-    verifyRetriesLeft_ = 0;
-    transport_->setAckTimeout(1000);
+    currentBaudRate_ = 0;
     paramsWriteTimer_->stop();
     autoReadParams_ = false;
+    baudCandidates_.clear();
     transport_->close();
     setConnectedUi(false);
-    currentBaudRate_ = 0;
     versionLabel_->setText(tr("固件：--"));
     versionLabel_->adjustSize();
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
-    setStatus(tr("连接失败：%1（未收到固件版本响应，请检查端口与波特率）").arg(reason), true);
+    // 恢复用户最初选择的波特率，避免停留在自动尝试过的值
+    const int idx = baudCombo_->findData(requestedBaudRate_);
+    if (idx >= 0) baudCombo_->setCurrentIndex(idx);
+    setStatus(tr("连接失败：%1（未通过固件版本校验，请检查端口与波特率）").arg(reason), true);
 }
 
 void MainWindow::onQueryVersionClicked() {
@@ -520,30 +564,19 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
     const auto byte = [&payload](int i) { return static_cast<quint8>(payload.at(i)); };
     switch (command & 0x00FF) {
     case 0x00A0: { // 固件版本：类型(2B) + 主版本(2B) + 次版本(4B)
-        QString versionText = tr("固件：--");
         if (payload.size() >= 8) {
             const quint32 minor = static_cast<quint32>(byte(4)) |
                                   (static_cast<quint32>(byte(5)) << 8) |
                                   (static_cast<quint32>(byte(6)) << 16) |
                                   (static_cast<quint32>(byte(7)) << 24);
             const QString sub = QString::number(minor, 16).rightJustified(8, QChar('0')).toUpper();
-            versionText = tr("固件：V%1.%2.%3")
-                              .arg(byte(2))
-                              .arg(byte(3), 2, 10, QChar('0'))
-                              .arg(sub);
-            versionLabel_->setText(versionText);
+            versionLabel_->setText(tr("固件：V%1.%2.%3")
+                                       .arg(byte(2))
+                                       .arg(byte(3), 2, 10, QChar('0'))
+                                       .arg(sub));
         }
-        if (verifying_) {
-            verifying_ = false;
-            deviceVerified_ = true;
-            verifyRetriesLeft_ = 0;
-            transport_->setAckTimeout(1000); // 握手完成，恢复常规超时给后续查询/写入
-            autoReadParams_ = true; // 握手队列结束后自动读取参数，填充控件与 HUD
-            setConnectedUi(true); // 恢复查询类按钮
-            setStatus(tr("设备校验通过 · %1").arg(versionText));
-        } else {
-            setStatus(tr("固件版本已读取"));
-        }
+        // 校验通过与否由 sequenceFinished 判定：结束配置 ACK 成功才算握手完成
+        if (!verifying_) setStatus(tr("固件版本已读取"));
         break;
     }
     case 0x0012: { // 目标检测参数：每个数据项单独一行
