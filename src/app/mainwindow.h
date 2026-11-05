@@ -26,7 +26,7 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
-    // 供 --demo 命令行参数使用：无硬件时直接进入演示模式
+    // 仅供 --demo 命令行参数使用：界面上不再提供演示入口
     void startDemo();
 
 private slots:
@@ -36,7 +36,6 @@ private slots:
     void onQueryVersionClicked();
     void onQueryParamsClicked();
     void onRestartClicked();
-    void onDemoClicked();
     void onDemoTick();
 
 private:
@@ -59,7 +58,6 @@ private:
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
     QPushButton* restartButton_ = nullptr;
-    QPushButton* demoButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
     QLabel* paramsLabel_ = nullptr;
     QCheckBox* snrCheck_ = nullptr;

@@ -80,17 +80,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     versionButton_ = new QPushButton(tr("读取版本"), this);
     paramsButton_ = new QPushButton(tr("读取参数"), this);
     restartButton_ = new QPushButton(tr("重启模块"), this);
-    demoButton_ = new QPushButton(tr("演示数据"), this);
     QFont sideFont = versionButton_->font();
     sideFont.setPointSize(14);
     sideFont.setBold(true);
     versionButton_->setFont(sideFont);
     paramsButton_->setFont(sideFont);
     restartButton_->setFont(sideFont);
-    demoButton_->setFont(sideFont);
     versionButton_->setToolTip(tr("使能配置 → 读取固件版本 → 结束配置"));
     paramsButton_->setToolTip(tr("读取目标检测参数与灵敏度参数"));
-    demoButton_->setToolTip(tr("无硬件时用模拟目标数据演示显示效果"));
     setConnectedUi(false);
 
     demoTimer_ = new QTimer(this);
@@ -145,7 +142,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dockLayout->addWidget(versionButton_);
     dockLayout->addWidget(paramsButton_);
     dockLayout->addWidget(restartButton_);
-    dockLayout->addWidget(demoButton_);
     dockLayout->addWidget(versionLabel_);
     dockLayout->addWidget(paramsLabel_);
     dockLayout->addSpacing(8);
@@ -184,7 +180,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(versionButton_, &QPushButton::clicked, this, &MainWindow::onQueryVersionClicked);
     connect(paramsButton_, &QPushButton::clicked, this, &MainWindow::onQueryParamsClicked);
     connect(restartButton_, &QPushButton::clicked, this, &MainWindow::onRestartClicked);
-    connect(demoButton_, &QPushButton::clicked, this, &MainWindow::onDemoClicked);
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setPointRadius(sizeCombo_->currentData().toDouble());
     });
@@ -314,28 +309,19 @@ void MainWindow::onRestartClicked() {
 }
 
 void MainWindow::startDemo() {
-    if (!demoTimer_->isActive()) onDemoClicked();
-}
-
-void MainWindow::onDemoClicked() {
-    if (demoTimer_->isActive()) {
-        stopDemo();
-        return;
-    }
+    if (demoTimer_->isActive()) return;
     if (transport_->isOpen()) {
         setStatus(tr("请先断开串口再进入演示"));
         return;
     }
     demoStep_ = 0;
     demoTimer_->start();
-    demoButton_->setText(tr("停止演示"));
     onDemoTick();
 }
 
 void MainWindow::stopDemo() {
     if (demoTimer_ == nullptr || !demoTimer_->isActive()) return;
     demoTimer_->stop();
-    demoButton_->setText(tr("演示数据"));
     lastScan_.reset();
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
