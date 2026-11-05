@@ -36,6 +36,9 @@ public:
     bool isOpen() const;
     QString errorString() const;
 
+    // 单条命令等待 ACK 的超时（ms）；连接握手阶段可调大以容忍模块上电就绪时间
+    void setAckTimeout(int ms);
+
     // 协议 §3：使能配置 → 查询命令 → 结束配置。
     // 严格按「发一条、等该条 ACK 成功、再发下一条」执行，并带 ACK 超时保护。
     bool queryFirmwareVersion();
@@ -73,6 +76,7 @@ private:
     FrameAssembler assembler_;
     std::deque<PendingCommand> pending_;
     QTimer ackTimer_; // 单发超时：等待当前命令的 ACK
+    int ackTimeoutMs_ = 1000;
     int pendingBaudRate_ = 0;
 };
 

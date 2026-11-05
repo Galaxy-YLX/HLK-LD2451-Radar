@@ -255,11 +255,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(transport_, &SerialTransport::frameError, this,
             [this](const QString& msg) {
-                if (verifying_) {
-                    onVerifyFailed(msg);
-                } else {
+                if (!verifying_) {
                     setStatus(msg);
+                    return;
                 }
+                // 模块刚上电时偶发丢 ACK，握手阶段允许重试一次再判连接失败
+                if (verifyRetriesLeft_ > 0) {
+                    --verifyRetriesLeft_;
+                    setStatus(tr("校验未响应，正在重试…（%1）").arg(msg));
+                    QTimer::singleShot(150, this, [this, msg] {
+                        if (!verifying_ || !transport_->isOpen()) return;
+                        if (!transport_->queryFirmwareVersion()) {
+                            onVerifyFailed(msg);
+                        }
+                    });
+                    return;
+                }
+                onVerifyFailed(msg);
             });
 }
 
@@ -314,6 +326,8 @@ void MainWindow::onConnectClicked() {
     currentBaudRate_ = baud;
     deviceVerified_ = false;
     verifying_ = true;
+    verifyRetriesLeft_ = 1;
+    transport_->setAckTimeout(2000); // 模块上电就绪慢，握手阶段放宽 ACK 超时
     setConnectedUi(true);
     versionButton_->setEnabled(false);
     paramsButton_->setEnabled(false);
@@ -323,13 +337,19 @@ void MainWindow::onConnectClicked() {
     versionLabel_->adjustSize();
     paramsLabel_->adjustSize();
     setStatus(tr("已打开 %1 @ %2，正在校验设备…").arg(port).arg(baud));
-    if (!transport_->queryFirmwareVersion()) {
-        onVerifyFailed(tr("无法发起版本查询"));
-    }
+    // 延时等待 USB 枚举/模块启动稳定后再发第一条命令
+    QTimer::singleShot(400, this, [this] {
+        if (!verifying_ || !transport_->isOpen()) return;
+        if (!transport_->queryFirmwareVersion()) {
+            onVerifyFailed(tr("无法发起版本查询"));
+        }
+    });
 }
 
 void MainWindow::onDisconnectClicked() {
     transport_->close();
+    transport_->setAckTimeout(1000);
+    verifyRetriesLeft_ = 0;
     setConnectedUi(false);
     currentBaudRate_ = 0;
     verifying_ = false;
@@ -346,6 +366,8 @@ void MainWindow::onVerifyFailed(const QString& reason) {
     if (!verifying_) return;
     verifying_ = false;
     deviceVerified_ = false;
+    verifyRetriesLeft_ = 0;
+    transport_->setAckTimeout(1000);
     paramsWriteTimer_->stop();
     autoReadParams_ = false;
     transport_->close();
@@ -514,6 +536,8 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         if (verifying_) {
             verifying_ = false;
             deviceVerified_ = true;
+            verifyRetriesLeft_ = 0;
+            transport_->setAckTimeout(1000); // 握手完成，恢复常规超时给后续查询/写入
             autoReadParams_ = true; // 握手队列结束后自动读取参数，填充控件与 HUD
             setConnectedUi(true); // 恢复查询类按钮
             setStatus(tr("设备校验通过 · %1").arg(versionText));

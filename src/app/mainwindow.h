@@ -79,6 +79,7 @@ private:
     bool autoReadParams_ = false;     // 握手/写入流程结束后自动重读参数刷新显示
     bool verifying_ = false;      // 连接握手：等待固件版本 ACK
     bool deviceVerified_ = false; // 已通过固件版本校验，设备确认为 LD2451
+    int verifyRetriesLeft_ = 0;   // 握手失败时的剩余重试次数
     QElapsedTimer fpsTimer_;
     int frameCounter_ = 0;
     double fps_ = 0.0;

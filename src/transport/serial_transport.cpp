@@ -2,6 +2,8 @@
 
 #include <QSerialPortInfo>
 
+#include <algorithm>
+
 namespace ld2451 {
 namespace {
 
@@ -42,7 +44,6 @@ SerialTransport::SerialTransport(QObject* parent)
 
     // 一问一答流程中，某条命令迟迟没有 ACK 时给出明确提示并中止队列
     ackTimer_.setSingleShot(true);
-    ackTimer_.setInterval(1000);
     connect(&ackTimer_, &QTimer::timeout, this, [this] {
         if (pending_.empty()) return;
         const auto cmd = static_cast<std::uint16_t>(pending_.front().command);
@@ -123,7 +124,11 @@ void SerialTransport::sendNext() {
         emit frameError(tr("命令写入失败"));
         return;
     }
-    ackTimer_.start();
+    ackTimer_.start(ackTimeoutMs_);
+}
+
+void SerialTransport::setAckTimeout(int ms) {
+    ackTimeoutMs_ = std::clamp(ms, 200, 5000);
 }
 
 bool SerialTransport::queryFirmwareVersion() {
