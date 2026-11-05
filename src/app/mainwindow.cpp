@@ -3,6 +3,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
@@ -101,6 +103,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
+    vectorTimeSpin_ = new QDoubleSpinBox(this);
+    vectorTimeSpin_->setRange(0.1, 5.0);
+    vectorTimeSpin_->setSingleStep(0.1);
+    vectorTimeSpin_->setDecimals(1);
+    vectorTimeSpin_->setValue(1.0);
+    vectorTimeSpin_->setSuffix(tr(" s"));
+    vectorTimeSpin_->setToolTip(tr("线段长度 = 速度(km/h)/3.6 × 该时长，单位：米"));
     labelsCheck_ = new QCheckBox(tr("数值标签"), this);
     labelsCheck_->setChecked(true);
 
@@ -122,7 +131,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dockLayout->addWidget(rangeCombo_);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
-    dockLayout->addWidget(vectorsCheck_);
+    auto* vectorRow = new QHBoxLayout();
+    vectorRow->addWidget(vectorsCheck_);
+    vectorRow->addWidget(vectorTimeSpin_, 1);
+    dockLayout->addLayout(vectorRow);
     dockLayout->addWidget(labelsCheck_);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("目标列表"), dockWidget));
@@ -166,8 +178,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto syncDisplay = [this] {
         view_->setShowVectors(vectorsCheck_->isChecked());
         view_->setShowLabels(labelsCheck_->isChecked());
+        view_->setVectorTime(vectorTimeSpin_->value());
     };
     connect(vectorsCheck_, &QCheckBox::toggled, this, syncDisplay);
+    connect(vectorTimeSpin_, &QDoubleSpinBox::valueChanged, this, syncDisplay);
     connect(labelsCheck_, &QCheckBox::toggled, this, syncDisplay);
     syncDisplay();
 

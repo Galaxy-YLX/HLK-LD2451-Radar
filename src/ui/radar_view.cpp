@@ -87,6 +87,11 @@ void RadarView::setShowLabels(bool show) {
     update();
 }
 
+void RadarView::setVectorTime(double seconds) {
+    vector_time_s_ = std::clamp(seconds, 0.1, 5.0);
+    update();
+}
+
 void RadarView::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter p(this);
@@ -194,15 +199,14 @@ void RadarView::paintEvent(QPaintEvent* event) {
         const QColor color = approaching ? kApproachColor : kLeaveColor;
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
-        // 速度线段：长度表示速度大小，靠近指向雷达、远离指向外；不绘制箭头。
-        // 终点在世界坐标中计算，保证镜像时线段方向仍与目标一致。
+        // 时间矢量：线段长度 = 速度(m/s) × 矢量时长(s)，即该时段内的径向位移。
+        // 靠近指向雷达、远离指向外；终点在世界坐标中计算，保证镜像时方向一致。
         if (show_vectors_ && t.speed_kmh > 0.0) {
             const double rad = t.angle_deg * kPi / 180.0;
-            const double line_m =
-                (8.0 + 40.0 * std::min(t.speed_kmh, 120.0) / 120.0) / scale;
+            const double distance_m = t.speed_kmh / 3.6 * vector_time_s_;
             const double sign = approaching ? -1.0 : 1.0;
-            const QPointF end = toScreen(t.x_m + sign * line_m * std::sin(rad),
-                                         t.y_m + sign * line_m * std::cos(rad));
+            const QPointF end = toScreen(t.x_m + sign * distance_m * std::sin(rad),
+                                         t.y_m + sign * distance_m * std::cos(rad));
             p.setPen(QPen(color, 1.5));
             p.drawLine(pos, end);
         }

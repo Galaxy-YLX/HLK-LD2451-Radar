@@ -42,6 +42,10 @@ public:
     void setShowVectors(bool show);
     void setShowLabels(bool show);
 
+    // 时间矢量：线段长度 = 速度(m/s) × 该时长(s)，表示这段时间内的径向位移
+    void setVectorTime(double seconds);
+    double vectorTime() const { return vector_time_s_; }
+
 protected:
     void paintEvent(QPaintEvent* event) override;
 
@@ -56,6 +60,7 @@ private:
     int mirror_ = 0;
     bool show_vectors_ = true;
     bool show_labels_ = true;
+    double vector_time_s_ = 1.0;
 };
 
 } // namespace ld2451
