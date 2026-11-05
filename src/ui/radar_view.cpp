@@ -12,9 +12,8 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 
-const QColor kApproachColor(0, 220, 120); // 靠近：雷达绿
-const QColor kLeaveColor(255, 176, 0);    // 远离：橙黄
-const QColor kAlarmColor(255, 64, 64);    // 报警：红
+const QColor kTargetColor(0, 220, 120); // 目标统一：雷达绿
+const QColor kAlarmColor(255, 64, 64);   // 报警：红
 
 // 按量程选择距离环步进（m），使屏幕上始终有 5~10 圈刻度
 double niceStep(double range_m) {
@@ -191,8 +190,8 @@ void RadarView::paintEvent(QPaintEvent* event) {
 
     for (const auto& t : targets_) {
         if (!visible(t)) continue;
-        const bool approaching = t.approaching; // 解析层按 §6.2 固定判定
-        const QColor color = approaching ? kApproachColor : kLeaveColor;
+        const bool approaching = t.approaching; // 仅用于矢量方向与带符号速度标签
+        const QColor color = kTargetColor;      // 点 / 速度线段 / 标签统一绿色
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
         // 时间矢量：线段长度 = 速度(m/s) × 矢量时长(s)，即该时段内的径向位移。
