@@ -44,6 +44,7 @@ private:
     void setStatus(const QString& text, bool alarm = false);
     void updateTargetTable(const std::shared_ptr<Scan>& scan);
     void onAck(quint16 command, bool success, const QByteArray& payload);
+    void onVerifyFailed(const QString& reason);
 
     RadarView* view_ = nullptr;
     SerialTransport* transport_ = nullptr;
@@ -68,6 +69,8 @@ private:
     QTimer* demoTimer_ = nullptr;
     int demoStep_ = 0;
     int currentBaudRate_ = 0; // 当前实际通信波特率，用于判断是否需要下发设置
+    bool verifying_ = false;      // 连接握手：等待固件版本 ACK
+    bool deviceVerified_ = false; // 已通过固件版本校验，设备确认为 LD2451
     QElapsedTimer fpsTimer_;
     int frameCounter_ = 0;
     double fps_ = 0.0;

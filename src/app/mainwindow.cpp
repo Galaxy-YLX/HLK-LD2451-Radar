@@ -203,6 +203,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                     frameCounter_ = 0;
                     fpsTimer_.restart();
                 }
+                if (!deviceVerified_) return; // 握手完成前保留校验提示
                 setStatus(tr("已连接 · %1 目标 · %2 fps · %3")
                               .arg(view_->targetCount())
                               .arg(QString::number(fps_, 'f', 1))
@@ -220,7 +221,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         setStatus(tr("波特率已同步为 %1").arg(baud));
     });
     connect(transport_, &SerialTransport::frameError, this,
-            [this](const QString& msg) { setStatus(msg); });
+            [this](const QString& msg) {
+                if (verifying_) {
+                    onVerifyFailed(msg);
+                } else {
+                    setStatus(msg);
+                }
+            });
 }
 
 void MainWindow::setConnectedUi(bool connected) {
@@ -261,12 +268,26 @@ void MainWindow::onConnectClicked() {
         return;
     }
     const int baud = baudCombo_->currentData().toInt();
-    if (transport_->open(port, baud)) {
-        setConnectedUi(true);
-        currentBaudRate_ = baud;
-        setStatus(tr("已连接 %1 @ %2").arg(port).arg(baud));
-    } else {
-        setStatus(tr("打开失败：%1").arg(transport_->errorString()));
+    if (!transport_->open(port, baud)) {
+        setStatus(tr("打开失败：%1").arg(transport_->errorString()), true);
+        return;
+    }
+
+    // 握手：串口打开只代表物理连通，需拿到固件版本 ACK 才确认是 LD2451
+    currentBaudRate_ = baud;
+    deviceVerified_ = false;
+    verifying_ = true;
+    setConnectedUi(true);
+    versionButton_->setEnabled(false);
+    paramsButton_->setEnabled(false);
+    applyBaudButton_->setEnabled(false);
+    versionLabel_->setText(tr("固件：--"));
+    paramsLabel_->setText(tr("参数：--"));
+    versionLabel_->adjustSize();
+    paramsLabel_->adjustSize();
+    setStatus(tr("已打开 %1 @ %2，正在校验设备…").arg(port).arg(baud));
+    if (!transport_->queryFirmwareVersion()) {
+        onVerifyFailed(tr("无法发起版本查询"));
     }
 }
 
@@ -274,9 +295,25 @@ void MainWindow::onDisconnectClicked() {
     transport_->close();
     setConnectedUi(false);
     currentBaudRate_ = 0;
+    verifying_ = false;
+    deviceVerified_ = false;
     setStatus(tr("已断开"));
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
+}
+
+void MainWindow::onVerifyFailed(const QString& reason) {
+    if (!verifying_) return;
+    verifying_ = false;
+    deviceVerified_ = false;
+    transport_->close();
+    setConnectedUi(false);
+    currentBaudRate_ = 0;
+    versionLabel_->setText(tr("固件：--"));
+    versionLabel_->adjustSize();
+    view_->setScan(nullptr);
+    updateTargetTable(nullptr);
+    setStatus(tr("连接失败：%1（未收到固件版本响应，请检查端口与波特率）").arg(reason), true);
 }
 
 void MainWindow::onQueryVersionClicked() {
@@ -386,18 +423,27 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
     const auto byte = [&payload](int i) { return static_cast<quint8>(payload.at(i)); };
     switch (command & 0x00FF) {
     case 0x00A0: { // 固件版本：类型(2B) + 主版本(2B) + 次版本(4B)
+        QString versionText = tr("固件：--");
         if (payload.size() >= 8) {
             const quint32 minor = static_cast<quint32>(byte(4)) |
                                   (static_cast<quint32>(byte(5)) << 8) |
                                   (static_cast<quint32>(byte(6)) << 16) |
                                   (static_cast<quint32>(byte(7)) << 24);
             const QString sub = QString::number(minor, 16).rightJustified(8, QChar('0')).toUpper();
-            versionLabel_->setText(tr("固件：V%1.%2.%3")
-                                       .arg(byte(2))
-                                       .arg(byte(3), 2, 10, QChar('0'))
-                                       .arg(sub));
+            versionText = tr("固件：V%1.%2.%3")
+                              .arg(byte(2))
+                              .arg(byte(3), 2, 10, QChar('0'))
+                              .arg(sub);
+            versionLabel_->setText(versionText);
         }
-        setStatus(tr("固件版本已读取"));
+        if (verifying_) {
+            verifying_ = false;
+            deviceVerified_ = true;
+            setConnectedUi(true); // 恢复查询类按钮
+            setStatus(tr("设备校验通过 · %1").arg(versionText));
+        } else {
+            setStatus(tr("固件版本已读取"));
+        }
         break;
     }
     case 0x0012: { // 目标检测参数
@@ -424,7 +470,8 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         break;
     }
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
-        setStatus(tr("配置模式已使能，等待查询…"));
+        setStatus(verifying_ ? tr("正在校验设备：配置模式已使能…")
+                             : tr("配置模式已使能，等待查询…"));
         break;
     case 0x00A1:
         setStatus(tr("波特率已写入，等待模块重启…"));
