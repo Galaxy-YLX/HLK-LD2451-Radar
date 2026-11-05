@@ -444,12 +444,12 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         }
         break;
     }
-    case 0x0012: { // 目标检测参数
+    case 0x0012: { // 目标检测参数：每个数据项单独一行
         if (payload.size() >= 4) {
             const QString dir = byte(1) == 0 ? tr("只检测远离")
                                 : byte(1) == 1 ? tr("只检测靠近")
                                                : tr("均检测");
-            paramsLabel_->setText(tr("检测：最远 %1 m · %2 · 最小 %3 km/h · 延迟 %4 s")
+            paramsLabel_->setText(tr("最远距离：%1 m\n检测方向：%2\n最小速度：%3 km/h\n无目标延迟：%4 s")
                                       .arg(byte(0))
                                       .arg(dir)
                                       .arg(byte(2))
@@ -458,11 +458,14 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("目标检测参数已读取"));
         break;
     }
-    case 0x0013: { // 灵敏度参数
+    case 0x0013: { // 灵敏度参数：继续逐行追加
         if (payload.size() >= 2) {
-            paramsLabel_->setText(paramsLabel_->text() + tr("\n灵敏度：触发 %1 次 · 阈值等级 %2")
-                                                              .arg(byte(0))
-                                                              .arg(byte(1)));
+            const QString current = paramsLabel_->text();
+            const QString prefix = (current == tr("参数：--")) ? QString()
+                                                               : current + QStringLiteral("\n");
+            paramsLabel_->setText(prefix + tr("累积触发：%1 次\n信噪比阈值：%2")
+                                               .arg(byte(0))
+                                               .arg(byte(1)));
         }
         setStatus(tr("灵敏度参数已读取"));
         break;
