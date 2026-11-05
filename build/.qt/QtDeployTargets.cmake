@@ -1,0 +1,6 @@
+set(__QT_DEPLOY_TARGET_ld2451_core_FILE /home/yun/Documents/HLK-LD2451-Radar/build/libld2451_core.a)
+set(__QT_DEPLOY_TARGET_ld2451_core_TYPE STATIC_LIBRARY)
+set(__QT_DEPLOY_TARGET_parser_tests_FILE /home/yun/Documents/HLK-LD2451-Radar/build/parser_tests)
+set(__QT_DEPLOY_TARGET_parser_tests_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_ld2451_viewer_FILE /home/yun/Documents/HLK-LD2451-Radar/build/ld2451_viewer)
+set(__QT_DEPLOY_TARGET_ld2451_viewer_TYPE EXECUTABLE)
