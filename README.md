@@ -1,2 +1,3 @@
-# -HLK-LD2451-
-基于HLK-LD2451的便携测速仪
+# HLK-LD2451-Radar
+
+基于 HLK-LD2451 的便携雷达
