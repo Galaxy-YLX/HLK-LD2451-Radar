@@ -301,13 +301,6 @@ void RadarView::paintEvent(QPaintEvent* event) {
                        Qt::AlignLeft | Qt::AlignVCenter, text);
         }
     }
-
-    // 报警边框
-    if (alarm_) {
-        p.setPen(QPen(kAlarmColor, 2));
-        p.setBrush(Qt::NoBrush);
-        p.drawRect(rect().adjusted(1, 1, -1, -1));
-    }
 }
 
 } // namespace ld2451

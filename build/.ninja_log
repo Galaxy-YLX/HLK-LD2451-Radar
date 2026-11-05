@@ -59,3 +59,9 @@
 278	3178	1793867538047875999	CMakeFiles/ld2451_viewer.dir/src/ui/radar_view.cpp.o	f10ee647c6af2af0
 277	3339	1793867538046876018	CMakeFiles/ld2451_viewer.dir/src/app/mainwindow.cpp.o	c45e79eec6ebbdd5
 3339	3755	1793867541108817772	ld2451_viewer	a50c4b28dab46fe3
+3	35	1793867729979224939	ld2451_viewer_autogen/timestamp	a8d1adc1d1ea8e1d
+3	35	1793867729979224939	ld2451_viewer_autogen/mocs_compilation.cpp	a8d1adc1d1ea8e1d
+3	35	1793867729979224939	/home/yun/Documents/HLK-LD2451-Radar/build/ld2451_viewer_autogen/timestamp	a8d1adc1d1ea8e1d
+3	35	1793867729979224939	/home/yun/Documents/HLK-LD2451-Radar/build/ld2451_viewer_autogen/mocs_compilation.cpp	a8d1adc1d1ea8e1d
+36	2007	1793867730012224312	CMakeFiles/ld2451_viewer.dir/src/ui/radar_view.cpp.o	f10ee647c6af2af0
+2007	2322	1793867731983186819	ld2451_viewer	a50c4b28dab46fe3
