@@ -95,10 +95,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     demoTimer_->setInterval(100);
     connect(demoTimer_, &QTimer::timeout, this, &MainWindow::onDemoTick);
 
-    versionLabel_ = new QLabel(tr("固件：--"), this);
-    paramsLabel_ = new QLabel(tr("参数：--"), this);
-    versionLabel_->setWordWrap(true);
-    paramsLabel_->setWordWrap(true);
+    versionLabel_ = new QLabel(tr("固件：--"), view_);
+    paramsLabel_ = new QLabel(tr("参数：--"), view_);
 
     rangeCombo_ = new QComboBox(this);
     for (int m : {10, 20, 30, 50, 100}) {
@@ -132,8 +130,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
     dockLayout->addWidget(restartButton_);
-    dockLayout->addWidget(versionLabel_);
-    dockLayout->addWidget(paramsLabel_);
     dockLayout->addSpacing(8);
     dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
     dockLayout->addWidget(rangeCombo_);
@@ -148,10 +144,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setWidget(dockWidget);
     addDockWidget(Qt::RightDockWidgetArea, controlDock);
 
-    // HUD：状态信息覆盖在雷达视图左上角
+    // HUD：状态 / 固件版本 / 参数，依次覆盖在雷达视图左上角
     statusLabel_ = new QLabel(tr("未连接"), view_);
     statusLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
     statusLabel_->move(8, 8);
+
+    const QString hudStyle = QStringLiteral("background: transparent; color: #00DC78;");
+    versionLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    versionLabel_->setStyleSheet(hudStyle);
+    versionLabel_->move(8, 30);
+    paramsLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    paramsLabel_->setStyleSheet(hudStyle);
+    paramsLabel_->move(8, 50);
+    versionLabel_->adjustSize();
+    paramsLabel_->adjustSize();
     setStatus(tr("未连接"));
 
     refreshPorts();
@@ -415,6 +421,8 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
     default:
         break; // 使能配置 / 结束配置的 ACK 无需提示
     }
+    versionLabel_->adjustSize();
+    paramsLabel_->adjustSize();
 }
 
 } // namespace ld2451
