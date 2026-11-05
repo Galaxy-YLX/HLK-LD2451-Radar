@@ -94,6 +94,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     demoTimer_->setInterval(100);
     connect(demoTimer_, &QTimer::timeout, this, &MainWindow::onDemoTick);
 
+    // 参数控件改动后合并 300 ms 内的连续变化，再自动下发 0x0002
+    paramsWriteTimer_ = new QTimer(this);
+    paramsWriteTimer_->setSingleShot(true);
+    paramsWriteTimer_->setInterval(300);
+    connect(paramsWriteTimer_, &QTimer::timeout, this, [this] { applyParamsFromControls(); });
+
     versionLabel_ = new QLabel(tr("固件：--"), view_);
     paramsLabel_ = new QLabel(tr("参数：--"), view_);
 
@@ -103,9 +109,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
     rangeCombo_->setToolTip(tr("既是视图量程（半径），也对应模块最远检测距离；协议上限 100 m"));
-    applyRangeButton_ = new QPushButton(tr("写入"), this);
-    applyRangeButton_->setToolTip(tr("把量程/最远距离、运动方向、速度门写入模块 0x0002；无目标延迟保持读回的原值"));
-
     motionDirCombo_ = new QComboBox(this);
     motionDirCombo_->addItem(tr("只检测远离"), 0);
     motionDirCombo_->addItem(tr("只检测靠近"), 1);
@@ -144,10 +147,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
     dockLayout->addWidget(new QLabel(tr("量程 / 最远距离"), dockWidget));
-    auto* rangeRow = new QHBoxLayout();
-    rangeRow->addWidget(rangeCombo_, 1);
-    rangeRow->addWidget(applyRangeButton_);
-    dockLayout->addLayout(rangeRow);
+    dockLayout->addWidget(rangeCombo_);
     auto* dirRow = new QHBoxLayout();
     dirRow->addWidget(new QLabel(tr("运动方向"), dockWidget));
     dirRow->addWidget(motionDirCombo_, 1);
@@ -196,12 +196,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(versionButton_, &QPushButton::clicked, this, &MainWindow::onQueryVersionClicked);
     connect(paramsButton_, &QPushButton::clicked, this, &MainWindow::onQueryParamsClicked);
     connect(applyBaudButton_, &QPushButton::clicked, this, &MainWindow::onApplyBaudClicked);
-    connect(applyRangeButton_, &QPushButton::clicked, this, &MainWindow::onApplyRangeClicked);
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setPointRadius(sizeCombo_->currentData().toDouble());
     });
     connect(rangeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setRangeM(rangeCombo_->currentData().toDouble());
+        scheduleParamsWrite();
+    });
+    connect(motionDirCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
+        scheduleParamsWrite();
+    });
+    connect(minSpeedSpin_, &QSpinBox::valueChanged, this, [this](int) {
+        scheduleParamsWrite();
     });
     connect(mirrorCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setMirror(mirrorCombo_->currentData().toInt());
@@ -263,7 +269,6 @@ void MainWindow::setConnectedUi(bool connected) {
     versionButton_->setEnabled(connected);
     paramsButton_->setEnabled(connected);
     applyBaudButton_->setEnabled(connected);
-    applyRangeButton_->setEnabled(connected);
 }
 
 void MainWindow::setStatus(const QString& text, bool alarm) {
@@ -291,6 +296,9 @@ void MainWindow::onConnectClicked() {
     if (transport_->isOpen()) return;
     stopDemo();
     targetParams_.clear(); // 新连接不沿用上一台设备的检测参数
+    paramsWriteTimer_->stop();
+    suppressParamWrite_ = false;
+    autoReadParams_ = false;
     const QString port = portCombo_->currentText().trimmed();
     if (port.isEmpty()) {
         setStatus(tr("请先选择串口"));
@@ -326,6 +334,9 @@ void MainWindow::onDisconnectClicked() {
     currentBaudRate_ = 0;
     verifying_ = false;
     deviceVerified_ = false;
+    paramsWriteTimer_->stop();
+    suppressParamWrite_ = false;
+    autoReadParams_ = false;
     setStatus(tr("已断开"));
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
@@ -335,6 +346,8 @@ void MainWindow::onVerifyFailed(const QString& reason) {
     if (!verifying_) return;
     verifying_ = false;
     deviceVerified_ = false;
+    paramsWriteTimer_->stop();
+    autoReadParams_ = false;
     transport_->close();
     setConnectedUi(false);
     currentBaudRate_ = 0;
@@ -367,10 +380,15 @@ void MainWindow::onApplyBaudClicked() {
                   : tr("不支持该波特率或流程进行中"));
 }
 
-void MainWindow::onApplyRangeClicked() {
-    if (!transport_->isOpen()) return;
+void MainWindow::scheduleParamsWrite() {
+    if (suppressParamWrite_ || !transport_->isOpen() || !deviceVerified_) return;
+    paramsWriteTimer_->start(); // singleShot，连续改动会重新计时
+}
+
+void MainWindow::applyParamsFromControls() {
+    if (!transport_->isOpen() || !deviceVerified_) return;
     if (targetParams_.size() < 4) {
-        setStatus(tr("请先点「读取参数」获取当前配置"));
+        setStatus(tr("参数尚未就绪，请稍候或点「读取参数」"));
         return;
     }
     const int meters = rangeCombo_->currentData().toInt();
@@ -383,12 +401,16 @@ void MainWindow::onApplyRangeClicked() {
     params[1] = static_cast<std::uint8_t>(motionDirCombo_->currentData().toInt());
     params[2] = static_cast<std::uint8_t>(minSpeedSpin_->value());
     // params[3] 无目标延迟：没有对应控件，保持读回的原值
-    setStatus(transport_->setTargetParams(params)
-                  ? tr("正在写入检测参数：%1 m / %2 / %3 km/h…")
-                        .arg(meters)
-                        .arg(motionDirCombo_->currentText())
-                        .arg(minSpeedSpin_->value())
-                  : tr("命令发送失败或流程进行中"));
+    if (!transport_->setTargetParams(params)) {
+        if (transport_->isOpen() && deviceVerified_) {
+            paramsWriteTimer_->start(); // 队列忙，稍后自动重试，避免改动丢失
+        }
+        return;
+    }
+    setStatus(tr("正在写入检测参数：%1 m / %2 / %3 km/h…")
+                  .arg(meters)
+                  .arg(motionDirCombo_->currentText())
+                  .arg(minSpeedSpin_->value()));
 }
 
 void MainWindow::startDemo() {
@@ -492,6 +514,7 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         if (verifying_) {
             verifying_ = false;
             deviceVerified_ = true;
+            autoReadParams_ = true; // 握手队列结束后自动读取参数，填充控件与 HUD
             setConnectedUi(true); // 恢复查询类按钮
             setStatus(tr("设备校验通过 · %1").arg(versionText));
         } else {
@@ -521,10 +544,12 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
                     bestIdx = i;
                 }
             }
+            suppressParamWrite_ = true; // 回同步控件不应触发新的下发
             if (bestIdx >= 0) rangeCombo_->setCurrentIndex(bestIdx);
             const int dirIdx = motionDirCombo_->findData(static_cast<int>(byte(1)));
             if (dirIdx >= 0) motionDirCombo_->setCurrentIndex(dirIdx);
             minSpeedSpin_->setValue(static_cast<int>(byte(2)));
+            suppressParamWrite_ = false;
         }
         setStatus(tr("目标检测参数已读取"));
         break;
@@ -542,7 +567,8 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         break;
     }
     case 0x0002:
-        setStatus(tr("检测参数已写入，可点「读取参数」确认"));
+        autoReadParams_ = true; // 写入队列结束后自动回读，刷新参数显示
+        setStatus(tr("检测参数已写入，正在回读刷新…"));
         break;
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
         setStatus(verifying_ ? tr("正在校验设备：配置模式已使能…")
@@ -554,8 +580,18 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
     case 0x00A3:
         setStatus(tr("模块重启中，即将同步本地波特率…"));
         break;
+    case 0x00FE: // 结束配置：当前队列已收尾，此时可安全发起下一条流程
+        if (autoReadParams_) {
+            autoReadParams_ = false;
+            QTimer::singleShot(0, this, [this] {
+                if (!transport_->queryParameters()) {
+                    setStatus(tr("参数回读未启动，请手动点「读取参数」"));
+                }
+            });
+        }
+        break;
     default:
-        break; // 结束配置等 ACK 无需提示
+        break;
     }
     versionLabel_->adjustSize();
     paramsLabel_->adjustSize();

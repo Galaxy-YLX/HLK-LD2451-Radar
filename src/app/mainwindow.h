@@ -36,7 +36,6 @@ private slots:
     void onQueryVersionClicked();
     void onQueryParamsClicked();
     void onApplyBaudClicked();
-    void onApplyRangeClicked();
     void onDemoTick();
 
 private:
@@ -46,6 +45,8 @@ private:
     void updateTargetTable(const std::shared_ptr<Scan>& scan);
     void onAck(quint16 command, bool success, const QByteArray& payload);
     void onVerifyFailed(const QString& reason);
+    void scheduleParamsWrite();
+    void applyParamsFromControls();
 
     RadarView* view_ = nullptr;
     SerialTransport* transport_ = nullptr;
@@ -56,7 +57,6 @@ private:
     QPushButton* applyBaudButton_ = nullptr;
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
-    QPushButton* applyRangeButton_ = nullptr;
     QComboBox* motionDirCombo_ = nullptr;
     QSpinBox* minSpeedSpin_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
@@ -71,9 +71,12 @@ private:
     QLabel* statusLabel_ = nullptr;
 
     QTimer* demoTimer_ = nullptr;
+    QTimer* paramsWriteTimer_ = nullptr; // 参数控件变化防抖，自动下发 0x0002
     int demoStep_ = 0;
     int currentBaudRate_ = 0; // 当前实际通信波特率，用于判断是否需要下发设置
     QByteArray targetParams_; // 0x0012 读回的 4 字节检测参数，写入时保留延迟项
+    bool suppressParamWrite_ = false; // 读取参数回同步控件时抑制自动下发
+    bool autoReadParams_ = false;     // 握手/写入流程结束后自动重读参数刷新显示
     bool verifying_ = false;      // 连接握手：等待固件版本 ACK
     bool deviceVerified_ = false; // 已通过固件版本校验，设备确认为 LD2451
     QElapsedTimer fpsTimer_;
