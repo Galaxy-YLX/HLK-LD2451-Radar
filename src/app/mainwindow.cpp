@@ -59,9 +59,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     mirrorCombo_ = new QComboBox(this);
     mirrorCombo_->addItem(tr("无镜像"), 0);
     mirrorCombo_->addItem(tr("左右镜像"), 1);
-    mirrorCombo_->addItem(tr("上下镜像"), 2);
-    mirrorCombo_->addItem(tr("双向镜像"), 3);
-    mirrorCombo_->setToolTip(tr("目标镜像显示"));
+    mirrorCombo_->setToolTip(tr("目标左右镜像显示"));
 
     toolbar->addWidget(new QLabel(tr(" 端口 "), this));
     toolbar->addWidget(portCombo_);

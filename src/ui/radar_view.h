@@ -34,7 +34,7 @@ public:
     void setRangeM(double range_m);
     double rangeM() const { return range_m_; }
 
-    // 镜像模式：0=无 1=左右(X翻转) 2=上下(Y翻转) 3=双向
+    // 镜像模式：0=无 1=左右(X翻转)
     void setMirror(int mode);
     int mirror() const { return mirror_; }
 

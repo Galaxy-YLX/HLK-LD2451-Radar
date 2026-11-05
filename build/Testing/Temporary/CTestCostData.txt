@@ -1,2 +1,2 @@
-parser_tests 19 0.000100018
+parser_tests 20 0.000104823
 ---

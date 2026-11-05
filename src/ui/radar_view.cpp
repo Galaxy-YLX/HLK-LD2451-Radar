@@ -73,7 +73,7 @@ void RadarView::setRangeM(double range_m) {
 }
 
 void RadarView::setMirror(int mode) {
-    mirror_ = mode & 3;
+    mirror_ = mode & 1;
     update();
 }
 
@@ -98,22 +98,18 @@ void RadarView::paintEvent(QPaintEvent* event) {
     p.setRenderHint(QPainter::Antialiasing, true);
     p.fillRect(rect(), QColor(0, 0, 0));
 
-    // 雷达位于视图底部（上下镜像时位于顶部），真实波束 ±15° 的扇形朝前展开。
+    // 雷达位于视图底部，真实波束 ±15° 的扇形朝上展开。
     const double margin = 28.0;
     const double ox = width() / 2.0;
+    const double oy = height() - margin;
     const double usable_h = std::max(1.0, height() - 2.0 * margin);
     const double usable_w = std::max(1.0, width() / 2.0 - margin);
     const double half_width_m = range_m_ * std::sin(kFovHalfDeg * kPi / 180.0);
     const double scale = std::min(usable_h / range_m_, usable_w / half_width_m);
 
-    // 上下镜像把扇形翻到下方，原点随之移到顶部
-    const bool downward = (mirror_ & 2) != 0;
-    const double oy = downward ? margin : height() - margin;
-
     // 世界坐标 (m) → 屏幕坐标（0° 朝上，屏幕 y 向下），左右镜像翻转 X。
     auto toScreen = [&](double x_m, double y_m) {
         if (mirror_ & 1) x_m = -x_m;
-        if (downward) y_m = -y_m;
         return QPointF(ox + x_m * scale, oy - y_m * scale);
     };
     auto onArc = [&](double d, double angle_deg) {
