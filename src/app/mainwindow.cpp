@@ -67,25 +67,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolbar->addWidget(connectButton_);
     toolbar->addWidget(disconnectButton_);
     toolbar->addSeparator();
-    toolbar->addWidget(mirrorCombo_);
-    toolbar->addWidget(sizeCombo_);
 
     QFont barFont = toolbar->font();
     barFont.setPointSize(12);
     toolbar->setFont(barFont);
 
-    // 侧边控制面板：模块命令 / 量程 / 显示设置 / 目标列表
+    // 「读取版本 / 读取参数」放入上边栏；「重启模块」保留在侧边控制面板
     versionButton_ = new QPushButton(tr("读取版本"), this);
     paramsButton_ = new QPushButton(tr("读取参数"), this);
     restartButton_ = new QPushButton(tr("重启模块"), this);
     QFont sideFont = versionButton_->font();
     sideFont.setPointSize(14);
     sideFont.setBold(true);
-    versionButton_->setFont(sideFont);
-    paramsButton_->setFont(sideFont);
     restartButton_->setFont(sideFont);
+    versionButton_->setFont(barFont);
+    paramsButton_->setFont(barFont);
     versionButton_->setToolTip(tr("使能配置 → 读取固件版本 → 结束配置"));
     paramsButton_->setToolTip(tr("读取目标检测参数与灵敏度参数"));
+    toolbar->addWidget(versionButton_);
+    toolbar->addWidget(paramsButton_);
+    toolbar->addSeparator();
+    toolbar->addWidget(mirrorCombo_);
+    toolbar->addWidget(sizeCombo_);
     setConnectedUi(false);
 
     demoTimer_ = new QTimer(this);
@@ -128,8 +131,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setTitleBarWidget(new QWidget(controlDock));
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
-    dockLayout->addWidget(versionButton_);
-    dockLayout->addWidget(paramsButton_);
     dockLayout->addWidget(restartButton_);
     dockLayout->addWidget(versionLabel_);
     dockLayout->addWidget(paramsLabel_);
