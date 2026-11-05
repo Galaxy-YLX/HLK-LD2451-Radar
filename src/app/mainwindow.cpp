@@ -176,7 +176,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setTitleBarWidget(new QWidget(controlDock));
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
-    dockLayout->addWidget(new QLabel(tr("量程 / 最远距离"), dockWidget));
+    dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
     dockLayout->addWidget(rangeCombo_);
     auto* dirRow = new QHBoxLayout();
     dirRow->addWidget(new QLabel(tr("运动方向"), dockWidget));
