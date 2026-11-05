@@ -9,7 +9,7 @@
 | 数据模型 | `src/core/` | `Target`（角度/距离/速度/信噪比 + 直角坐标）、`Scan`（一帧目标） |
 | 协议解析 | `src/protocol/` | `parser`（数据帧、ACK 解析 + 命令帧构造）、`frame_assembler`（双帧头字节流组帧）。纯 C++ 无 Qt 依赖 |
 | 传输层 | `src/transport/` | `SerialTransport`：Qt SerialPort `readyRead` → 组帧 → 解析 → `scanReady` / `ackReady` 信号 |
-| 显示层 | `src/ui/` | `RadarView`：**±15° 扇形视图**，雷达位于底部中心（距离弧、角度刻度、目标着色、速度线段、余辉轨迹） |
+| 显示层 | `src/ui/` | `RadarView`：**±15° 扇形视图**，雷达位于底部中心（距离弧、角度刻度、目标着色、速度线段） |
 | 应用层 | `src/app/` | `MainWindow`（串口连接、模块命令、目标表格、HUD）、`main`（雷达主题） |
 | 测试 | `tests/` | 以协议文档 §7 实例帧为基准的纯 C++ 单测 |
 
@@ -34,7 +34,7 @@ ctest --test-dir build --output-on-failure   # 协议单测
 
 Fedora 上打开 `/dev/ttyUSB0` 需先加入 `dialout` 组：`sudo usermod -aG dialout $USER`，重新登录后生效。
 
-界面说明：演示模式只通过启动参数 `--demo` 进入（界面上无演示入口）；「按字段定义 / 按示例解析」用于切换速度方向字节的解释；量程、镜像、点大小、信噪比下限、余辉、速度线段、数值标签均可在界面调整。
+界面说明：演示模式只通过启动参数 `--demo` 进入（界面上无演示入口）；「按字段定义 / 按示例解析」用于切换速度方向字节的解释；量程、镜像、点大小、速度线段、数值标签均可在界面调整。
 
 ## 已知协议歧义（见 `参考文件/LD2451串口通信协议文档.md`）
 

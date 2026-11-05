@@ -3,11 +3,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
@@ -106,15 +104,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
     rangeCombo_->setToolTip(tr("视图量程（半径），协议距离上限 100 m"));
 
-    snrCheck_ = new QCheckBox(tr("信噪比下限"), this);
-    snrSpin_ = new QSpinBox(this);
-    snrSpin_->setRange(0, 255);
-    snrSpin_->setValue(20);
-    persistenceCheck_ = new QCheckBox(tr("余辉控制"), this);
-    persistenceSpin_ = new QSpinBox(this);
-    persistenceSpin_->setRange(1, 20);
-    persistenceSpin_->setValue(2);
-    persistenceSpin_->setSuffix(tr(" s"));
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
     labelsCheck_ = new QCheckBox(tr("数值标签"), this);
@@ -149,14 +138,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dockLayout->addWidget(rangeCombo_);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
-    auto* snrRow = new QHBoxLayout();
-    snrRow->addWidget(snrCheck_);
-    snrRow->addWidget(snrSpin_, 1);
-    dockLayout->addLayout(snrRow);
-    auto* persistenceRow = new QHBoxLayout();
-    persistenceRow->addWidget(persistenceCheck_);
-    persistenceRow->addWidget(persistenceSpin_, 1);
-    dockLayout->addLayout(persistenceRow);
     dockLayout->addWidget(vectorsCheck_);
     dockLayout->addWidget(labelsCheck_);
     dockLayout->addWidget(directionCombo_);
@@ -197,15 +178,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // 显示设置：任何变化同步到视图
     auto syncDisplay = [this] {
-        view_->setSnrFilter(snrCheck_->isChecked(), snrSpin_->value());
-        view_->setPersistence(persistenceCheck_->isChecked(), persistenceSpin_->value());
         view_->setShowVectors(vectorsCheck_->isChecked());
         view_->setShowLabels(labelsCheck_->isChecked());
     };
-    connect(snrCheck_, &QCheckBox::toggled, this, syncDisplay);
-    connect(snrSpin_, &QSpinBox::valueChanged, this, syncDisplay);
-    connect(persistenceCheck_, &QCheckBox::toggled, this, syncDisplay);
-    connect(persistenceSpin_, &QSpinBox::valueChanged, this, syncDisplay);
     connect(vectorsCheck_, &QCheckBox::toggled, this, syncDisplay);
     connect(labelsCheck_, &QCheckBox::toggled, this, syncDisplay);
     syncDisplay();

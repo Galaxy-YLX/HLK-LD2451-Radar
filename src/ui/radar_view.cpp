@@ -35,17 +35,11 @@ QString signedSpeed(double kmh) {
 
 RadarView::RadarView(QWidget* parent) : QWidget(parent) {
     setMinimumSize(400, 400);
-    decayTimer_.setInterval(50);
-    connect(&decayTimer_, &QTimer::timeout, this, [this] {
-        decayExpired();
-        update();
-    });
 }
 
 bool RadarView::visible(const Target& t) const {
     // 超出真实水平波束 ±15° 的上报角度不在扇形视图中绘制
-    if (std::abs(t.angle_deg) > kFovHalfDeg) return false;
-    return !snr_enable_ || t.snr >= snr_min_;
+    return std::abs(t.angle_deg) <= kFovHalfDeg;
 }
 
 int RadarView::targetCount() const {
@@ -54,11 +48,8 @@ int RadarView::targetCount() const {
 }
 
 void RadarView::setScan(const std::shared_ptr<const Scan>& scan) {
-    decayExpired();
-
     if (scan == nullptr) {
         targets_.clear();
-        trail_.clear();
         alarm_ = false;
         point_count_ = 0;
         update();
@@ -68,31 +59,7 @@ void RadarView::setScan(const std::shared_ptr<const Scan>& scan) {
     alarm_ = scan->alarm_approaching;
     targets_ = scan->targets;
     point_count_ = targetCount();
-
-    if (persistence_enable_) {
-        const auto now = std::chrono::steady_clock::now();
-        for (const auto& t : targets_) {
-            if (!visible(t)) continue;
-            trail_.push_back({t.x_m, t.y_m, t.direction_flag, now});
-        }
-        if (trail_.size() > kMaxTrailPoints) {
-            trail_.erase(trail_.begin(),
-                         trail_.begin() + static_cast<std::ptrdiff_t>(trail_.size() - kMaxTrailPoints));
-        }
-    }
     update();
-}
-
-void RadarView::decayExpired() {
-    if (trail_.empty()) return;
-    const auto now = std::chrono::steady_clock::now();
-    const double max_age_ms = persistence_seconds_ * 1000.0;
-    trail_.erase(std::remove_if(trail_.begin(), trail_.end(),
-                                [&](const TrailPoint& pt) {
-                                    return std::chrono::duration<double, std::milli>(now - pt.stamp)
-                                               .count() > max_age_ms;
-                                }),
-                 trail_.end());
 }
 
 void RadarView::setPointRadius(double r) {
@@ -107,25 +74,6 @@ void RadarView::setRangeM(double range_m) {
 
 void RadarView::setMirror(int mode) {
     mirror_ = mode & 3;
-    update();
-}
-
-void RadarView::setSnrFilter(bool enable, int min_snr) {
-    snr_enable_ = enable;
-    snr_min_ = std::clamp(min_snr, 0, 255);
-    point_count_ = targetCount();
-    update();
-}
-
-void RadarView::setPersistence(bool enable, int seconds) {
-    persistence_enable_ = enable;
-    persistence_seconds_ = std::max(1, seconds);
-    if (enable) {
-        decayTimer_.start();
-    } else {
-        decayTimer_.stop();
-        trail_.clear();
-    }
     update();
 }
 
@@ -228,22 +176,6 @@ void RadarView::paintEvent(QPaintEvent* event) {
         const QPointF pt = onArc(range_m_, a);
         p.drawText(QRectF(pt.x() - 20, pt.y() - 14, 40, 16),
                    Qt::AlignCenter, tr("%1°").arg(a));
-    }
-
-    // 余辉轨迹：按年龄淡出
-    if (!trail_.empty()) {
-        const auto now = std::chrono::steady_clock::now();
-        const double max_age_ms = persistence_seconds_ * 1000.0;
-        p.setPen(Qt::NoPen);
-        for (const auto& pt : trail_) {
-            const double age =
-                std::chrono::duration<double, std::milli>(now - pt.stamp).count();
-            const double alpha = std::clamp(1.0 - age / max_age_ms, 0.0, 1.0);
-            QColor c = isApproaching(pt.direction_flag, mapping_) ? kApproachColor : kLeaveColor;
-            c.setAlphaF(static_cast<float>(alpha * 0.55));
-            p.setBrush(c);
-            p.drawEllipse(toScreen(pt.x_m, pt.y_m), point_radius_ * 0.6, point_radius_ * 0.6);
-        }
     }
 
     // 雷达本体标记（扇形顶点）

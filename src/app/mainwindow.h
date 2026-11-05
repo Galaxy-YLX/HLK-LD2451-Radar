@@ -12,7 +12,6 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class QPushButton;
-class QSpinBox;
 class QTableWidget;
 class QTimer;
 
@@ -60,10 +59,6 @@ private:
     QPushButton* restartButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
     QLabel* paramsLabel_ = nullptr;
-    QCheckBox* snrCheck_ = nullptr;
-    QSpinBox* snrSpin_ = nullptr;
-    QCheckBox* persistenceCheck_ = nullptr;
-    QSpinBox* persistenceSpin_ = nullptr;
     QCheckBox* vectorsCheck_ = nullptr;
     QCheckBox* labelsCheck_ = nullptr;
     QTableWidget* table_ = nullptr;
