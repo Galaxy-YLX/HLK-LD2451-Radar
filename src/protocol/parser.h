@@ -68,12 +68,4 @@ bool parseAckFrame(const std::uint8_t* data, std::size_t len, Ack& ack);
 std::vector<std::uint8_t> buildCommand(std::uint16_t command,
                                        const std::vector<std::uint8_t>& value = {});
 
-// 方向标志解释：协议 §6.2 定义 0x01=靠近、0x00=远离，
-// 但 §7 的示例解析恰好相反。默认按 §6.2；显示层可切换以适配实测。
-enum class DirectionMapping {
-    PerSpec,    // 按 §6.2 字段定义
-    PerExample, // 按 §7 示例解析
-};
-bool isApproaching(std::uint8_t direction_flag, DirectionMapping mapping);
-
 } // namespace ld2451

@@ -52,7 +52,6 @@ private:
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
-    QComboBox* directionCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
@@ -62,7 +61,6 @@ private:
     QTableWidget* table_ = nullptr;
     QLabel* statusLabel_ = nullptr;
 
-    std::shared_ptr<Scan> lastScan_;
     QTimer* demoTimer_ = nullptr;
     int demoStep_ = 0;
     QElapsedTimer fpsTimer_;

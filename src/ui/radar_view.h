@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "core/scan.h"
-#include "protocol/parser.h"
 
 namespace ld2451 {
 
@@ -42,9 +41,6 @@ public:
     // 速度线段 / 数值标签显示开关
     void setShowVectors(bool show);
     void setShowLabels(bool show);
-    // 方向定义：协议 §6.2 字段定义 / §7 示例解析（实测后可切换）
-    void setDirectionMapping(DirectionMapping mapping);
-    DirectionMapping directionMapping() const { return mapping_; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -58,7 +54,6 @@ private:
     double range_m_ = 30.0;
     double point_radius_ = 4.0;
     int mirror_ = 0;
-    DirectionMapping mapping_ = DirectionMapping::PerSpec;
     bool show_vectors_ = true;
     bool show_labels_ = true;
 };

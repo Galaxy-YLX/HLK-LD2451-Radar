@@ -2,7 +2,6 @@
   /home/yun/Documents/HLK-LD2451-Radar/build/ld2451_viewer_autogen/moc_predefs.h \
   /home/yun/Documents/HLK-LD2451-Radar/src/core/scan.h \
   /home/yun/Documents/HLK-LD2451-Radar/src/core/target.h \
-  /home/yun/Documents/HLK-LD2451-Radar/src/protocol/parser.h \
   /usr/include/alloca.h \
   /usr/include/asm-generic/bitsperlong.h \
   /usr/include/asm-generic/errno-base.h \

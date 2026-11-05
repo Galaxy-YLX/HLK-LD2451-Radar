@@ -115,9 +115,4 @@ std::vector<std::uint8_t> buildCommand(std::uint16_t command,
     return frame;
 }
 
-bool isApproaching(std::uint8_t direction_flag, DirectionMapping mapping) {
-    if (mapping == DirectionMapping::PerSpec) return direction_flag == 0x01;
-    return direction_flag == 0x00; // §7 示例：00=靠近、01=远离
-}
-
 } // namespace ld2451

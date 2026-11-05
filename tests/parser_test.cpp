@@ -94,13 +94,15 @@ int main() {
         CHECK(near(scan.targets[2].distance_m, 95.0), "T3 distance 95 m, got %.2f",
               scan.targets[2].distance_m);
 
-        // 方向映射：§6.2 定义 0x01=靠近，§7 示例解析相反
-        CHECK(!isApproaching(scan.targets[0].direction_flag, DirectionMapping::PerSpec),
-              "PerSpec: flag 0x00 should be 远离");
-        CHECK(isApproaching(scan.targets[0].direction_flag, DirectionMapping::PerExample),
-              "PerExample: flag 0x00 should be 靠近");
-        CHECK(isApproaching(scan.targets[1].direction_flag, DirectionMapping::PerSpec),
-              "PerSpec: flag 0x01 should be 靠近");
+        // 方向固定按 §6.2 字段定义解析：0x01 靠近、0x00 远离
+        CHECK(scan.targets[0].direction_flag == 0x00 && !scan.targets[0].approaching,
+              "flag 0x00 should be 远离");
+        CHECK(scan.targets[1].direction_flag == 0x01 && scan.targets[1].approaching,
+              "flag 0x01 should be 靠近");
+        CHECK(near(scan.targets[0].signed_speed_kmh, -60.0), "远离速度应为 -60, got %.2f",
+              scan.targets[0].signed_speed_kmh);
+        CHECK(near(scan.targets[1].signed_speed_kmh, 60.0), "靠近速度应为 +60, got %.2f",
+              scan.targets[1].signed_speed_kmh);
     }
 
     // 2. 空帧（无目标）

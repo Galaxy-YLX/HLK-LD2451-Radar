@@ -14,7 +14,6 @@
 
 #include <cmath>
 
-#include "protocol/parser.h"
 #include "transport/serial_transport.h"
 #include "ui/radar_view.h"
 
@@ -105,11 +104,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     labelsCheck_ = new QCheckBox(tr("数值标签"), this);
     labelsCheck_->setChecked(true);
 
-    directionCombo_ = new QComboBox(this);
-    directionCombo_->addItem(tr("按字段定义"), static_cast<int>(DirectionMapping::PerSpec));
-    directionCombo_->addItem(tr("按示例解析"), static_cast<int>(DirectionMapping::PerExample));
-    directionCombo_->setToolTip(tr("协议 §6.2 定义 0x01=靠近；§7 示例解析相反，接硬件后按实测切换"));
-
     table_ = new QTableWidget(this);
     table_->setColumnCount(5);
     table_->setHorizontalHeaderLabels({tr("角度"), tr("距离"), tr("速度"), tr("方向"), tr("SNR")});
@@ -130,7 +124,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     dockLayout->addWidget(vectorsCheck_);
     dockLayout->addWidget(labelsCheck_);
-    dockLayout->addWidget(directionCombo_);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("目标列表"), dockWidget));
     dockLayout->addWidget(table_, 1);
@@ -169,12 +162,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(mirrorCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setMirror(mirrorCombo_->currentData().toInt());
     });
-    connect(directionCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
-        view_->setDirectionMapping(
-            static_cast<DirectionMapping>(directionCombo_->currentData().toInt()));
-        updateTargetTable(lastScan_);
-    });
-
     // 显示设置：任何变化同步到视图
     auto syncDisplay = [this] {
         view_->setShowVectors(vectorsCheck_->isChecked());
@@ -186,7 +173,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     connect(transport_, &SerialTransport::scanReady, this,
             [this](const std::shared_ptr<Scan>& s) {
-                lastScan_ = s;
                 view_->setScan(s);
                 updateTargetTable(s);
 
@@ -261,7 +247,6 @@ void MainWindow::onDisconnectClicked() {
     transport_->close();
     setConnectedUi(false);
     setStatus(tr("已断开"));
-    lastScan_.reset();
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
 }
@@ -290,7 +275,6 @@ void MainWindow::startDemo() {
 void MainWindow::stopDemo() {
     if (demoTimer_ == nullptr || !demoTimer_->isActive()) return;
     demoTimer_->stop();
-    lastScan_.reset();
     view_->setScan(nullptr);
     updateTargetTable(nullptr);
     setStatus(tr("演示已停止"));
@@ -326,7 +310,6 @@ void MainWindow::onDemoTick() {
 
     scan->target_count = static_cast<int>(scan->targets.size());
     scan->alarm_approaching = true;
-    lastScan_ = scan;
     view_->setScan(scan);
     updateTargetTable(scan);
     setStatus(tr("演示模式 · %1 目标 · 有目标靠近!").arg(scan->target_count), true);
@@ -339,8 +322,7 @@ void MainWindow::updateTargetTable(const std::shared_ptr<Scan>& scan) {
     for (const auto& t : scan->targets) {
         const int row = table_->rowCount();
         table_->insertRow(row);
-        const bool approaching =
-            isApproaching(t.direction_flag, view_->directionMapping());
+        const bool approaching = t.approaching; // 解析层按 §6.2 固定判定
         const double speed = approaching ? t.speed_kmh : -t.speed_kmh;
         const auto cell = [](const QString& text) {
             auto* item = new QTableWidgetItem(text);

@@ -87,11 +87,6 @@ void RadarView::setShowLabels(bool show) {
     update();
 }
 
-void RadarView::setDirectionMapping(DirectionMapping mapping) {
-    mapping_ = mapping;
-    update();
-}
-
 void RadarView::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter p(this);
@@ -195,7 +190,7 @@ void RadarView::paintEvent(QPaintEvent* event) {
 
     for (const auto& t : targets_) {
         if (!visible(t)) continue;
-        const bool approaching = isApproaching(t.direction_flag, mapping_);
+        const bool approaching = t.approaching; // 解析层按 §6.2 固定判定
         const QColor color = approaching ? kApproachColor : kLeaveColor;
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
