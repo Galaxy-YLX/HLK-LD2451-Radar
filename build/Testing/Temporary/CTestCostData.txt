@@ -1,2 +1,2 @@
-parser_tests 21 0.000127247
+parser_tests 22 9.07731e-05
 ---

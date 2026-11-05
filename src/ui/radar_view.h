@@ -42,7 +42,7 @@ public:
     void setShowVectors(bool show);
     void setShowLabels(bool show);
 
-    // 时间矢量：线段长度 = 速度(m/s) × 该时长(s)，表示这段时间内的径向位移
+    // 时间矢量：线段长度 = 速度(m/s) × 时长(1~10 s)，表示这段时间内的径向位移
     void setVectorTime(double seconds);
     double vectorTime() const { return vector_time_s_; }
 

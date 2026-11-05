@@ -88,7 +88,7 @@ void RadarView::setShowLabels(bool show) {
 }
 
 void RadarView::setVectorTime(double seconds) {
-    vector_time_s_ = std::clamp(seconds, 0.1, 5.0);
+    vector_time_s_ = std::clamp(seconds, 1.0, 10.0);
     update();
 }
 
