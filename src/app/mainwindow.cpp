@@ -7,6 +7,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
@@ -102,8 +103,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
     rangeCombo_->setToolTip(tr("既是视图量程（半径），也对应模块最远检测距离；协议上限 100 m"));
-    applyRangeButton_ = new QPushButton(tr("应用"), this);
-    applyRangeButton_->setToolTip(tr("把当前量程写入模块最远检测距离；需先点「读取参数」以保留其它三项配置"));
+    applyRangeButton_ = new QPushButton(tr("写入"), this);
+    applyRangeButton_->setToolTip(tr("把量程/最远距离、运动方向、速度门写入模块 0x0002；无目标延迟保持读回的原值"));
+
+    motionDirCombo_ = new QComboBox(this);
+    motionDirCombo_->addItem(tr("只检测远离"), 0);
+    motionDirCombo_->addItem(tr("只检测靠近"), 1);
+    motionDirCombo_->addItem(tr("均检测"), 2);
+    motionDirCombo_->setCurrentIndex(2);
+    motionDirCombo_->setToolTip(tr("协议 0x0002 第 2 字节：00 只远离 / 01 只靠近 / 02 均检测"));
+    minSpeedSpin_ = new QSpinBox(this);
+    minSpeedSpin_->setRange(0, 120);
+    minSpeedSpin_->setValue(0);
+    minSpeedSpin_->setSuffix(tr(" km/h"));
+    minSpeedSpin_->setToolTip(tr("速度门：最小运动速度，低于该值的目标被模块忽略；协议范围 0~120 km/h"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
@@ -135,6 +148,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     rangeRow->addWidget(rangeCombo_, 1);
     rangeRow->addWidget(applyRangeButton_);
     dockLayout->addLayout(rangeRow);
+    auto* dirRow = new QHBoxLayout();
+    dirRow->addWidget(new QLabel(tr("运动方向"), dockWidget));
+    dirRow->addWidget(motionDirCombo_, 1);
+    dockLayout->addLayout(dirRow);
+    auto* speedRow = new QHBoxLayout();
+    speedRow->addWidget(new QLabel(tr("速度门"), dockWidget));
+    speedRow->addWidget(minSpeedSpin_, 1);
+    dockLayout->addLayout(speedRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -358,9 +379,15 @@ void MainWindow::onApplyRangeClicked() {
     for (int i = 0; i < 4; ++i) {
         params.push_back(static_cast<std::uint8_t>(targetParams_.at(i)));
     }
-    params[0] = static_cast<std::uint8_t>(meters); // 只替换最远检测距离，其余三项保持不变
+    params[0] = static_cast<std::uint8_t>(meters);
+    params[1] = static_cast<std::uint8_t>(motionDirCombo_->currentData().toInt());
+    params[2] = static_cast<std::uint8_t>(minSpeedSpin_->value());
+    // params[3] 无目标延迟：没有对应控件，保持读回的原值
     setStatus(transport_->setTargetParams(params)
-                  ? tr("正在写入最远检测距离 %1 m…").arg(meters)
+                  ? tr("正在写入检测参数：%1 m / %2 / %3 km/h…")
+                        .arg(meters)
+                        .arg(motionDirCombo_->currentText())
+                        .arg(minSpeedSpin_->value())
                   : tr("命令发送失败或流程进行中"));
 }
 
@@ -495,6 +522,9 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
                 }
             }
             if (bestIdx >= 0) rangeCombo_->setCurrentIndex(bestIdx);
+            const int dirIdx = motionDirCombo_->findData(static_cast<int>(byte(1)));
+            if (dirIdx >= 0) motionDirCombo_->setCurrentIndex(dirIdx);
+            minSpeedSpin_->setValue(static_cast<int>(byte(2)));
         }
         setStatus(tr("目标检测参数已读取"));
         break;
@@ -512,7 +542,7 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         break;
     }
     case 0x0002:
-        setStatus(tr("最远检测距离已写入，可点「读取参数」确认"));
+        setStatus(tr("检测参数已写入，可点「读取参数」确认"));
         break;
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
         setStatus(verifying_ ? tr("正在校验设备：配置模式已使能…")
