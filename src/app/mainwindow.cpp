@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -176,31 +177,33 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setTitleBarWidget(new QWidget(controlDock));
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
-    dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
-    dockLayout->addWidget(rangeCombo_);
-    auto* dirRow = new QHBoxLayout();
-    dirRow->addWidget(new QLabel(tr("运动方向"), dockWidget));
-    dirRow->addWidget(motionDirCombo_, 1);
-    dockLayout->addLayout(dirRow);
-    auto* speedRow = new QHBoxLayout();
-    speedRow->addWidget(new QLabel(tr("速度门"), dockWidget));
-    speedRow->addWidget(minSpeedSpin_, 1);
-    dockLayout->addLayout(speedRow);
-    auto* triggerRow = new QHBoxLayout();
-    triggerRow->addWidget(new QLabel(tr("累积触发"), dockWidget));
-    triggerRow->addWidget(triggerCombo_, 1);
-    dockLayout->addLayout(triggerRow);
-    auto* snrRow = new QHBoxLayout();
-    snrRow->addWidget(new QLabel(tr("信噪比阈值"), dockWidget));
-    snrRow->addWidget(snrThresholdCombo_, 1);
-    dockLayout->addLayout(snrRow);
-    dockLayout->addSpacing(10);
-    dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
-    auto* vectorRow = new QHBoxLayout();
-    vectorRow->addWidget(vectorsCheck_);
-    vectorRow->addWidget(vectorTimeCombo_, 1);
-    dockLayout->addLayout(vectorRow);
-    dockLayout->addWidget(labelsCheck_);
+    // 所有选择框统一放在第 1 列：左边界、宽度、高度由网格对齐
+    auto* grid = new QGridLayout();
+    grid->setVerticalSpacing(6);
+    grid->setHorizontalSpacing(8);
+    grid->setColumnStretch(1, 1);
+    const auto addField = [&](int row, const QString& text, QWidget* field) {
+        grid->addWidget(new QLabel(text, dockWidget), row, 0);
+        grid->addWidget(field, row, 1);
+    };
+    addField(0, tr("量程"), rangeCombo_);
+    addField(1, tr("运动方向"), motionDirCombo_);
+    addField(2, tr("速度门"), minSpeedSpin_);
+    addField(3, tr("累积触发"), triggerCombo_);
+    addField(4, tr("信噪比阈值"), snrThresholdCombo_);
+    grid->setRowMinimumHeight(5, 6); // 参数区与显示区之间留白
+    grid->addWidget(new QLabel(tr("显示"), dockWidget), 6, 0, 1, 2);
+    grid->addWidget(vectorsCheck_, 7, 0);
+    grid->addWidget(vectorTimeCombo_, 7, 1);
+    grid->addWidget(labelsCheck_, 8, 0, 1, 2);
+    dockLayout->addLayout(grid);
+
+    // 统一选择框高度（QComboBox / QSpinBox 的默认 sizeHint 可能差几个像素）
+    const int fieldHeight = rangeCombo_->sizeHint().height();
+    QWidget* const fields[] = {rangeCombo_, motionDirCombo_, minSpeedSpin_, triggerCombo_,
+                               snrThresholdCombo_, vectorTimeCombo_};
+    for (QWidget* field : fields) field->setMinimumHeight(fieldHeight);
+
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("目标列表"), dockWidget));
     dockLayout->addWidget(table_, 1);
