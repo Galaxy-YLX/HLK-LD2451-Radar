@@ -61,12 +61,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     mirrorCombo_->addItem(tr("双向镜像"), 3);
     mirrorCombo_->setToolTip(tr("目标镜像显示"));
 
-    rotationCombo_ = new QComboBox(this);
-    for (int deg : {0, 90, 180, 270}) {
-        rotationCombo_->addItem(tr("%1°").arg(deg), deg);
-    }
-    rotationCombo_->setToolTip(tr("目标旋转显示"));
-
     toolbar->addWidget(new QLabel(tr(" 端口 "), this));
     toolbar->addWidget(portCombo_);
     toolbar->addWidget(new QLabel(tr(" 波特率 "), this));
@@ -76,7 +70,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolbar->addWidget(disconnectButton_);
     toolbar->addSeparator();
     toolbar->addWidget(mirrorCombo_);
-    toolbar->addWidget(rotationCombo_);
     toolbar->addWidget(sizeCombo_);
 
     QFont barFont = toolbar->font();
@@ -200,9 +193,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(mirrorCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setMirror(mirrorCombo_->currentData().toInt());
-    });
-    connect(rotationCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
-        view_->setRotationDeg(rotationCombo_->currentData().toDouble());
     });
     connect(directionCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setDirectionMapping(

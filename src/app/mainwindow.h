@@ -55,7 +55,6 @@ private:
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
-    QComboBox* rotationCombo_ = nullptr;
     QComboBox* directionCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;

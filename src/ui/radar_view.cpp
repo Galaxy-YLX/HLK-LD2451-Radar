@@ -110,11 +110,6 @@ void RadarView::setMirror(int mode) {
     update();
 }
 
-void RadarView::setRotationDeg(double deg) {
-    rotation_deg_ = deg;
-    update();
-}
-
 void RadarView::setSnrFilter(bool enable, int min_snr) {
     snr_enable_ = enable;
     snr_min_ = std::clamp(min_snr, 0, 255);
@@ -155,47 +150,23 @@ void RadarView::paintEvent(QPaintEvent* event) {
     p.setRenderHint(QPainter::Antialiasing, true);
     p.fillRect(rect(), QColor(0, 0, 0));
 
-    // 雷达位于视图底部（或旋转/翻转后的对应边缘），真实波束 ±15° 的扇形朝前展开。
+    // 雷达位于视图底部（上下镜像时位于顶部），真实波束 ±15° 的扇形朝前展开。
     const double margin = 28.0;
     const double ox = width() / 2.0;
     const double usable_h = std::max(1.0, height() - 2.0 * margin);
     const double usable_w = std::max(1.0, width() / 2.0 - margin);
+    const double half_width_m = range_m_ * std::sin(kFovHalfDeg * kPi / 180.0);
+    const double scale = std::min(usable_h / range_m_, usable_w / half_width_m);
 
-    // 世界坐标 → 旋转/镜像后的坐标 (rx, ry)，ry 为正表示朝屏幕上方。
-    const double rot = rotation_deg_ * kPi / 180.0;
-    const double cosR = std::cos(rot);
-    const double sinR = std::sin(rot);
-    auto transform = [&](double x_m, double y_m) {
-        double wx = x_m;
-        double wy = y_m;
-        if (mirror_ & 1) wx = -wx; // 左右镜像
-        if (mirror_ & 2) wy = -wy; // 上下镜像
-        return QPointF(wx * cosR - wy * sinR, wx * sinR + wy * cosR);
-    };
+    // 上下镜像把扇形翻到下方，原点随之移到顶部
+    const bool downward = (mirror_ & 2) != 0;
+    const double oy = downward ? margin : height() - margin;
 
-    // 采样扇形外缘，得到变换后坐标的横/纵范围，据此自适应缩放并定位原点，
-    // 保证镜像或旋转到任意方位时扇形都完整落在窗口内。
-    double minRx = 0.0, maxRxS = 0.0, minRy = 0.0, maxRyS = 0.0;
-    for (int k = 0; k <= 30; ++k) {
-        const double a = (-kFovHalfDeg + 2.0 * kFovHalfDeg * k / 30.0) * kPi / 180.0;
-        const QPointF q = transform(range_m_ * std::sin(a), range_m_ * std::cos(a));
-        minRx = std::min(minRx, q.x());
-        maxRxS = std::max(maxRxS, q.x());
-        minRy = std::min(minRy, q.y());
-        maxRyS = std::max(maxRyS, q.y());
-    }
-    const double spanY = std::max(1e-6, maxRyS - minRy);
-    const double spanX = std::max(1e-6, std::max(std::abs(minRx), std::abs(maxRxS)));
-    const double scale = std::min(usable_h / spanY, usable_w / spanX);
-
-    // 原点纵坐标取「使 y = oy - ry*scale 全部落在可视区内」的区间中点
-    const double lower = margin + maxRyS * scale;
-    const double upper = height() - margin + minRy * scale;
-    const double oy = std::clamp((lower + upper) / 2.0, margin, height() - margin);
-
+    // 世界坐标 (m) → 屏幕坐标（0° 朝上，屏幕 y 向下），左右镜像翻转 X。
     auto toScreen = [&](double x_m, double y_m) {
-        const QPointF q = transform(x_m, y_m);
-        return QPointF(ox + q.x() * scale, oy - q.y() * scale);
+        if (mirror_ & 1) x_m = -x_m;
+        if (downward) y_m = -y_m;
+        return QPointF(ox + x_m * scale, oy - y_m * scale);
     };
     auto onArc = [&](double d, double angle_deg) {
         const double rad = angle_deg * kPi / 180.0;
@@ -297,7 +268,7 @@ void RadarView::paintEvent(QPaintEvent* event) {
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
         // 速度矢量：靠近指向雷达，远离指向外；长度随速度幅值。
-        // 终点在世界坐标中计算，保证镜像/旋转时箭头方向仍与目标一致。
+        // 终点在世界坐标中计算，保证镜像时箭头方向仍与目标一致。
         if (show_vectors_ && t.speed_kmh > 0.0) {
             const double rad = t.angle_deg * kPi / 180.0;
             const double arrow_m =
