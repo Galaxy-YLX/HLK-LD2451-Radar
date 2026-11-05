@@ -150,6 +150,12 @@ int main() {
         auto expectedSens = hexBytes("FD FC FB FA 06 00 03 00 03 00 00 00 04 03 02 01");
         CHECK(sens == expectedSens, "set-sensitivity command frame mismatch");
 
+        // 协议 §5.5：累积触发 1 次 + 信噪比阈值等级 5（命令值第 2 字节）
+        auto sensSnr = buildCommand(static_cast<std::uint16_t>(Command::SetSensitivity),
+                                    {0x01, 0x05, 0x00, 0x00});
+        auto expectedSensSnr = hexBytes("FD FC FB FA 06 00 03 00 01 05 00 00 04 03 02 01");
+        CHECK(sensSnr == expectedSensSnr, "set-sensitivity with SNR level mismatch");
+
         // 协议 §5.3：最远 100 m / 只检测靠近 / 最小 5 km/h / 延迟 2 s
         auto tp = buildCommand(static_cast<std::uint16_t>(Command::SetTargetParams),
                                {0x64, 0x01, 0x05, 0x02});

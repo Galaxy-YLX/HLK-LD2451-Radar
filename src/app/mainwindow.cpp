@@ -22,6 +22,17 @@
 #include "ui/radar_view.h"
 
 namespace ld2451 {
+namespace {
+
+// 协议 §5.5：模块用 0x00 表示「程序默认」的信噪比阈值等级 4，
+// 下拉只提供 3~8 的显式等级，因此把读回字节映射为下拉中的等级；
+// 文档未定义的其它值回落到最小等级 3，避免误判为「用户已改动」。
+int snrLevelFromRaw(int raw) {
+    if (raw == 0) return 4;
+    return (raw >= 3 && raw <= 8) ? raw : 3;
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     view_ = new RadarView(this);
@@ -129,6 +140,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     const int defaultTriggerIdx = triggerCombo_->findData(kDefaultTriggerCount);
     if (defaultTriggerIdx >= 0) triggerCombo_->setCurrentIndex(defaultTriggerIdx);
     triggerCombo_->setToolTip(tr("协议 0x0003 第 1 字节：连续检测次数满足才上报报警（1~10 次）"));
+    snrThresholdCombo_ = new QComboBox(this);
+    for (int level = 3; level <= 8; ++level) {
+        snrThresholdCombo_->addItem(tr("%1 级").arg(level), level);
+    }
+    // 初始值固定为 3（最灵敏）；按值查找，避免依赖选项顺序
+    constexpr int kDefaultSnrLevel = 3;
+    const int defaultSnrIdx = snrThresholdCombo_->findData(kDefaultSnrLevel);
+    if (defaultSnrIdx >= 0) snrThresholdCombo_->setCurrentIndex(defaultSnrIdx);
+    snrThresholdCombo_->setToolTip(
+        tr("协议 0x0003 第 2 字节：3~8 级，值越大越难检测；模块返回 0 表示程序默认等级 4"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
@@ -169,6 +190,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     triggerRow->addWidget(new QLabel(tr("累积触发"), dockWidget));
     triggerRow->addWidget(triggerCombo_, 1);
     dockLayout->addLayout(triggerRow);
+    auto* snrRow = new QHBoxLayout();
+    snrRow->addWidget(new QLabel(tr("信噪比阈值"), dockWidget));
+    snrRow->addWidget(snrThresholdCombo_, 1);
+    dockLayout->addLayout(snrRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -223,6 +248,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         scheduleParamsWrite();
     });
     connect(triggerCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
+        scheduleParamsWrite();
+    });
+    connect(snrThresholdCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         scheduleParamsWrite();
     });
     connect(mirrorCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
@@ -485,17 +513,25 @@ void MainWindow::applyParamsFromControls() {
     params[2] = static_cast<std::uint8_t>(minSpeedSpin_->value());
     // params[3] 无目标延迟：没有对应控件，保持读回的原值
 
-    // 灵敏度参数（协议 §5.5）：仅当累积触发与读回值不同时才附带 0x0003，
-    // 信噪比阈值等级与两个扩展字节保持读回原值，两条写命令共用一条 ACK 队列。
+    // 灵敏度参数（协议 §5.5）：仅当累积触发或信噪比阈值与读回值不同时才附带 0x0003，
+    // 未改动的那一项与两个扩展字节保持读回原值，两条写命令共用一条 ACK 队列。
     std::vector<std::uint8_t> sensitivity;
     const int trigger = triggerCombo_->currentData().toInt();
-    if (sensitivityParams_.size() >= 4 &&
-        trigger != static_cast<int>(static_cast<std::uint8_t>(sensitivityParams_.at(0)))) {
-        sensitivity.reserve(4);
-        for (int i = 0; i < 4; ++i) {
-            sensitivity.push_back(static_cast<std::uint8_t>(sensitivityParams_.at(i)));
+    const int snrLevel = snrThresholdCombo_->currentData().toInt();
+    if (sensitivityParams_.size() >= 4) {
+        const int readTrigger = static_cast<std::uint8_t>(sensitivityParams_.at(0));
+        const int readSnrLevel =
+            snrLevelFromRaw(static_cast<std::uint8_t>(sensitivityParams_.at(1)));
+        const bool triggerChanged = trigger != readTrigger;
+        const bool snrChanged = snrLevel != readSnrLevel;
+        if (triggerChanged || snrChanged) {
+            sensitivity.reserve(4);
+            for (int i = 0; i < 4; ++i) {
+                sensitivity.push_back(static_cast<std::uint8_t>(sensitivityParams_.at(i)));
+            }
+            sensitivity[0] = static_cast<std::uint8_t>(trigger);
+            if (snrChanged) sensitivity[1] = static_cast<std::uint8_t>(snrLevel);
         }
-        sensitivity[0] = static_cast<std::uint8_t>(trigger);
     }
     if (!transport_->setParameters(params, sensitivity)) {
         if (transport_->isOpen() && deviceVerified_) {
@@ -503,11 +539,12 @@ void MainWindow::applyParamsFromControls() {
         }
         return;
     }
-    setStatus(tr("正在写入参数：%1 m / %2 / %3 km/h / 累积触发 %4 次…")
+    setStatus(tr("正在写入参数：%1 m / %2 / %3 km/h / 累积触发 %4 次 / 信噪比阈值 %5 级…")
                   .arg(meters)
                   .arg(motionDirCombo_->currentText())
                   .arg(minSpeedSpin_->value())
-                  .arg(trigger));
+                  .arg(trigger)
+                  .arg(snrLevel));
 }
 
 void MainWindow::startDemo() {
@@ -642,23 +679,26 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("目标检测参数已读取"));
         break;
     }
-    case 0x0013: { // 灵敏度参数：继续逐行追加，并同步「累积触发」下拉
+    case 0x0013: { // 灵敏度参数：HUD 追加显示，并同步「累积触发 / 信噪比阈值」下拉
         if (payload.size() >= 2) {
             const QString current = paramsLabel_->text();
             const QString prefix = (current == tr("参数：--")) ? QString()
                                                                : current + QStringLiteral("\n");
+            const int rawSnr = static_cast<int>(byte(1));
+            const QString snrText = rawSnr == 0 ? tr("0（默认 4）") : QString::number(rawSnr);
             paramsLabel_->setText(prefix + tr("累积触发：%1 次\n信噪比阈值：%2")
                                                .arg(byte(0))
-                                               .arg(byte(1)));
+                                               .arg(snrText));
         }
         if (payload.size() >= 4) {
             sensitivityParams_ = payload.left(4);
-            const int idx = triggerCombo_->findData(static_cast<int>(byte(0)));
-            if (idx >= 0) {
-                suppressParamWrite_ = true; // 回同步控件不应触发新的下发
-                triggerCombo_->setCurrentIndex(idx);
-                suppressParamWrite_ = false;
-            }
+            const int triggerIdx = triggerCombo_->findData(static_cast<int>(byte(0)));
+            const int snrIdx = snrThresholdCombo_->findData(
+                snrLevelFromRaw(static_cast<int>(byte(1))));
+            suppressParamWrite_ = true; // 回同步控件不应触发新的下发
+            if (triggerIdx >= 0) triggerCombo_->setCurrentIndex(triggerIdx);
+            if (snrIdx >= 0) snrThresholdCombo_->setCurrentIndex(snrIdx);
+            suppressParamWrite_ = false;
         }
         setStatus(tr("灵敏度参数已读取"));
         break;

@@ -63,7 +63,8 @@ private:
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* motionDirCombo_ = nullptr;
     QSpinBox* minSpeedSpin_ = nullptr;
-    QComboBox* triggerCombo_ = nullptr; // 累积有效触发次数（协议 §5.5，1~10 次）
+    QComboBox* triggerCombo_ = nullptr;      // 累积有效触发次数（协议 §5.5，1~10 次）
+    QComboBox* snrThresholdCombo_ = nullptr; // 信噪比阈值等级（协议 §5.5，3~8）
     QComboBox* mirrorCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
