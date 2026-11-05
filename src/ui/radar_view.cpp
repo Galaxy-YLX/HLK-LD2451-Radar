@@ -2,6 +2,7 @@
 
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
 
 #include <algorithm>
 #include <cmath>
@@ -42,11 +43,12 @@ RadarView::RadarView(QWidget* parent) : QWidget(parent) {
 }
 
 bool RadarView::visible(const Target& t) const {
+    // 超出真实水平波束 ±15° 的上报角度不在扇形视图中绘制
+    if (std::abs(t.angle_deg) > kFovHalfDeg) return false;
     return !snr_enable_ || t.snr >= snr_min_;
 }
 
 int RadarView::targetCount() const {
-    if (!snr_enable_) return static_cast<int>(targets_.size());
     return static_cast<int>(std::count_if(targets_.begin(), targets_.end(),
                                           [this](const Target& t) { return visible(t); }));
 }
@@ -153,62 +155,107 @@ void RadarView::paintEvent(QPaintEvent* event) {
     p.setRenderHint(QPainter::Antialiasing, true);
     p.fillRect(rect(), QColor(0, 0, 0));
 
-    const double cx = width() / 2.0;
-    const double cy = height() / 2.0;
-    const double scale = std::min(width(), height()) / (2.0 * range_m_);
+    // 雷达位于视图底部（或旋转/翻转后的对应边缘），真实波束 ±15° 的扇形朝前展开。
+    const double margin = 28.0;
+    const double ox = width() / 2.0;
+    const double usable_h = std::max(1.0, height() - 2.0 * margin);
+    const double usable_w = std::max(1.0, width() / 2.0 - margin);
 
-    // 世界坐标 (m) → 屏幕坐标（雷达居中，y 轴向上为正，屏幕 y 向下）。
-    // 先镜像、再旋转，用于适配雷达安装方位。
+    // 世界坐标 → 旋转/镜像后的坐标 (rx, ry)，ry 为正表示朝屏幕上方。
     const double rot = rotation_deg_ * kPi / 180.0;
     const double cosR = std::cos(rot);
     const double sinR = std::sin(rot);
-    auto toScreen = [&](double x_m, double y_m) {
+    auto transform = [&](double x_m, double y_m) {
         double wx = x_m;
         double wy = y_m;
         if (mirror_ & 1) wx = -wx; // 左右镜像
         if (mirror_ & 2) wy = -wy; // 上下镜像
-        const double rx = wx * cosR - wy * sinR;
-        const double ry = wx * sinR + wy * cosR;
-        return QPointF(cx + rx * scale, cy - ry * scale);
+        return QPointF(wx * cosR - wy * sinR, wx * sinR + wy * cosR);
     };
 
-    // 距离环 + 距离标尺（步进随量程自适应）
+    // 采样扇形外缘，得到变换后坐标的横/纵范围，据此自适应缩放并定位原点，
+    // 保证镜像或旋转到任意方位时扇形都完整落在窗口内。
+    double minRx = 0.0, maxRxS = 0.0, minRy = 0.0, maxRyS = 0.0;
+    for (int k = 0; k <= 30; ++k) {
+        const double a = (-kFovHalfDeg + 2.0 * kFovHalfDeg * k / 30.0) * kPi / 180.0;
+        const QPointF q = transform(range_m_ * std::sin(a), range_m_ * std::cos(a));
+        minRx = std::min(minRx, q.x());
+        maxRxS = std::max(maxRxS, q.x());
+        minRy = std::min(minRy, q.y());
+        maxRyS = std::max(maxRyS, q.y());
+    }
+    const double spanY = std::max(1e-6, maxRyS - minRy);
+    const double spanX = std::max(1e-6, std::max(std::abs(minRx), std::abs(maxRxS)));
+    const double scale = std::min(usable_h / spanY, usable_w / spanX);
+
+    // 原点纵坐标取「使 y = oy - ry*scale 全部落在可视区内」的区间中点
+    const double lower = margin + maxRyS * scale;
+    const double upper = height() - margin + minRy * scale;
+    const double oy = std::clamp((lower + upper) / 2.0, margin, height() - margin);
+
+    auto toScreen = [&](double x_m, double y_m) {
+        const QPointF q = transform(x_m, y_m);
+        return QPointF(ox + q.x() * scale, oy - q.y() * scale);
+    };
+    auto onArc = [&](double d, double angle_deg) {
+        const double rad = angle_deg * kPi / 180.0;
+        return toScreen(d * std::sin(rad), d * std::cos(rad));
+    };
+    const QPointF origin = toScreen(0.0, 0.0);
+
+    // 扇形背景
+    QPainterPath sector;
+    sector.moveTo(origin);
+    for (int k = 0; k <= 60; ++k) {
+        const double a = -kFovHalfDeg + 2.0 * kFovHalfDeg * k / 60.0;
+        sector.lineTo(onArc(range_m_, a));
+    }
+    sector.closeSubpath();
+    p.fillPath(sector, QColor(8, 26, 16));
+
+    // 距离弧：只画 ±15° 扇形内的部分（步进随量程自适应）
     const double step = niceStep(range_m_);
     p.setPen(QPen(QColor(34, 42, 36), 1));
-    for (double d = step; d < range_m_; d += step) {
-        const double r = d * scale;
-        p.drawEllipse(QPointF(cx, cy), r, r);
+    for (double d = step; d <= range_m_ + 1e-9; d += step) {
+        QPainterPath arc;
+        for (int k = 0; k <= 60; ++k) {
+            const double a = -kFovHalfDeg + 2.0 * kFovHalfDeg * k / 60.0;
+            const QPointF pt = onArc(d, a);
+            if (k == 0) arc.moveTo(pt);
+            else arc.lineTo(pt);
+        }
+        p.drawPath(arc);
     }
-    p.drawLine(QPointF(cx - range_m_ * scale, cy), QPointF(cx + range_m_ * scale, cy));
-    p.drawLine(QPointF(cx, cy - range_m_ * scale), QPointF(cx, cy + range_m_ * scale));
+
+    // 角度射线：每 5° 一条，±15° 边界线稍亮
+    for (int a = -15; a <= 15; a += 5) {
+        const bool edge = (a == -15 || a == 15);
+        p.setPen(QPen(edge ? QColor(0, 110, 60) : QColor(34, 42, 36), edge ? 1.5 : 1.0));
+        p.drawLine(origin, onArc(range_m_, a));
+    }
 
     QFont smallFont = p.font();
     smallFont.setPointSizeF(8.0);
     p.setFont(smallFont);
+
+    // 距离标尺：沿 0° 轴标注
     p.setPen(QPen(QColor(96, 110, 100), 1));
-    for (double d = step; d < range_m_; d += step) {
-        const double x = cx + d * scale;
-        p.drawLine(QPointF(x, cy - 4), QPointF(x, cy + 4));
+    for (double d = step; d <= range_m_ + 1e-9; d += step) {
+        const QPointF pt = onArc(d, 0.0);
+        p.drawLine(QPointF(pt.x() - 4, pt.y()), QPointF(pt.x() + 4, pt.y()));
         const QString label = std::abs(d - std::round(d)) < 1e-9
                                   ? QString::number(static_cast<int>(std::lround(d)))
                                   : QString::number(d, 'f', 1);
-        p.drawText(QRectF(x - 24, cy + 6, 48, 12), Qt::AlignHCenter | Qt::AlignTop,
-                   label + tr("m"));
+        p.drawText(QRectF(pt.x() + 8, pt.y() - 8, 48, 16),
+                   Qt::AlignLeft | Qt::AlignVCenter, label + tr("m"));
     }
 
-    // 角度射线与刻度：0° 正前方（向上），每 30° 一条
-    p.setPen(QPen(QColor(34, 42, 36), 1));
-    for (int a = -120; a <= 120; a += 30) {
-        const double rad = a * kPi / 180.0;
-        p.drawLine(QPointF(cx, cy),
-                   toScreen(range_m_ * std::sin(rad), range_m_ * std::cos(rad)));
-    }
+    // 角度刻度标签：置于扇形外缘
+    const int angleTicks[] = {-15, -10, -5, 0, 5, 10, 15};
     p.setPen(QPen(QColor(96, 110, 100), 1));
-    for (int a = -120; a <= 120; a += 30) {
-        const double rad = a * kPi / 180.0;
-        const QPointF labelPos =
-            toScreen(range_m_ * 0.93 * std::sin(rad), range_m_ * 0.93 * std::cos(rad));
-        p.drawText(QRectF(labelPos.x() - 20, labelPos.y() - 8, 40, 16),
+    for (int a : angleTicks) {
+        const QPointF pt = onArc(range_m_, a);
+        p.drawText(QRectF(pt.x() - 20, pt.y() - 14, 40, 16),
                    Qt::AlignCenter, tr("%1°").arg(a));
     }
 
@@ -228,13 +275,13 @@ void RadarView::paintEvent(QPaintEvent* event) {
         }
     }
 
-    // 雷达本体标记
+    // 雷达本体标记（扇形顶点）
     p.setPen(Qt::NoPen);
     p.setBrush(QColor(0, 220, 120));
-    p.drawEllipse(QPointF(cx, cy), 4.0, 4.0);
+    p.drawEllipse(origin, 4.0, 4.0);
     p.setPen(QPen(QColor(0, 220, 120), 1));
     p.setBrush(Qt::NoBrush);
-    p.drawEllipse(QPointF(cx, cy), 8.0, 8.0);
+    p.drawEllipse(origin, 8.0, 8.0);
 
     // 当前帧目标
     if (point_count_ == 0) {
@@ -249,18 +296,25 @@ void RadarView::paintEvent(QPaintEvent* event) {
         const QColor color = approaching ? kApproachColor : kLeaveColor;
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
-        // 速度矢量：靠近指向中心，远离指向外；长度随速度幅值
+        // 速度矢量：靠近指向雷达，远离指向外；长度随速度幅值。
+        // 终点在世界坐标中计算，保证镜像/旋转时箭头方向仍与目标一致。
         if (show_vectors_ && t.speed_kmh > 0.0) {
             const double rad = t.angle_deg * kPi / 180.0;
-            const QPointF unit(std::sin(rad), -std::cos(rad)); // 屏幕方向（0° 向上）
-            const double len = 8.0 + 40.0 * std::min(t.speed_kmh, 120.0) / 120.0;
-            const QPointF tip = pos + (approaching ? -unit : unit) * len;
-            const QPointF back = approaching ? unit : -unit;
-            const QPointF normal(-back.y(), back.x());
+            const double arrow_m =
+                (8.0 + 40.0 * std::min(t.speed_kmh, 120.0) / 120.0) / scale;
+            const double sign = approaching ? -1.0 : 1.0;
+            const QPointF tip = toScreen(t.x_m + sign * arrow_m * std::sin(rad),
+                                         t.y_m + sign * arrow_m * std::cos(rad));
+            const QPointF delta = tip - pos;
+            const double len = std::hypot(delta.x(), delta.y());
             p.setPen(QPen(color, 1.5));
             p.drawLine(pos, tip);
-            p.drawLine(tip, tip + back * 7.0 + normal * 3.5);
-            p.drawLine(tip, tip + back * 7.0 - normal * 3.5);
+            if (len > 1e-3) {
+                const QPointF u = delta / len;
+                const QPointF n(-u.y(), u.x());
+                p.drawLine(tip, tip - u * 7.0 + n * 3.5);
+                p.drawLine(tip, tip - u * 7.0 - n * 3.5);
+            }
         }
 
         // 目标点；报警时靠近目标加红圈

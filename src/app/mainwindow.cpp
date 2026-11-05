@@ -373,11 +373,12 @@ void MainWindow::onDemoTick() {
         scan->targets.push_back(tg);
     };
 
-    addTarget(-35.0 + 25.0 * std::sin(t * 0.7), 18.0 + 8.0 * std::sin(t * 0.9),
+    // 目标角度控制在 ±15° 真实波束内，距离不超过默认 30 m 量程
+    addTarget(-8.0 + 6.0 * std::sin(t * 0.7), 18.0 + 8.0 * std::sin(t * 0.9),
               42.0 + 15.0 * std::sin(t), true, 28);
-    addTarget(20.0 + 30.0 * std::cos(t * 0.5), 25.0 - 6.0 * std::cos(t * 0.8),
+    addTarget(6.0 + 8.0 * std::cos(t * 0.5), 22.0 - 5.0 * std::cos(t * 0.8),
               30.0 + 10.0 * std::cos(t * 0.6), false, 18);
-    addTarget(5.0 + 10.0 * std::sin(t * 0.4), 8.0 + 3.0 * std::cos(t * 1.1), 12.0, true, 45);
+    addTarget(2.0 + 3.0 * std::sin(t * 0.4), 8.0 + 3.0 * std::cos(t * 1.1), 12.0, true, 45);
 
     scan->target_count = static_cast<int>(scan->targets.size());
     scan->alarm_approaching = true;

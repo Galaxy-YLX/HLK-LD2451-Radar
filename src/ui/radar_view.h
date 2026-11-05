@@ -13,18 +13,21 @@
 
 namespace ld2451 {
 
-// 2D 极坐标目标视图（PPI）：雷达位于中心，0° 为正前方（向上）。
-// 与 EaiLidar Viewer 的 ScanView 同一套方案：绿黑主题、距离环/标尺、
-// 镜像旋转适配安装方位、可调点大小、余辉控制。目标按运动方向着色，
-// 并绘制速度矢量与数值标签。
+// 2D 极坐标目标视图：按 LD2451 真实波束画 ±15° 扇形，雷达位于底部中心，
+// 0° 为正前方（向上）。与 EaiLidar Viewer 的 ScanView 同一套方案：绿黑主题、
+// 距离弧/标尺、镜像旋转适配安装方位、可调点大小、余辉控制。目标按运动方向
+// 着色，并绘制速度矢量与数值标签；超出波束的目标不在视图中绘制。
 class RadarView : public QWidget {
     Q_OBJECT
 public:
+    // 手册 V1.03 性能参数：水平探测角度 ±15°
+    static constexpr double kFovHalfDeg = 15.0;
+
     explicit RadarView(QWidget* parent = nullptr);
 
     void setScan(const std::shared_ptr<const Scan>& scan);
 
-    // 当前显示的目标数（已计入信噪比过滤）
+    // 当前显示的目标数（已计入波束范围与信噪比过滤）
     int targetCount() const;
 
     // 点的绘制半径（px）
