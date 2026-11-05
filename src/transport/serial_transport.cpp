@@ -3,6 +3,24 @@
 #include <QSerialPortInfo>
 
 namespace ld2451 {
+namespace {
+
+// 协议 §5.8 波特率选择索引
+int baudIndex(int baudRate) {
+    switch (baudRate) {
+    case 9600: return 0x0001;
+    case 19200: return 0x0002;
+    case 38400: return 0x0003;
+    case 57600: return 0x0004;
+    case 115200: return 0x0005;
+    case 230400: return 0x0006;
+    case 256000: return 0x0007;
+    case 460800: return 0x0008;
+    default: return 0;
+    }
+}
+
+} // namespace
 
 SerialTransport::SerialTransport(QObject* parent)
     : QObject(parent),
@@ -29,6 +47,7 @@ SerialTransport::SerialTransport(QObject* parent)
         if (pending_.empty()) return;
         const auto cmd = static_cast<std::uint16_t>(pending_.front().command);
         pending_.clear();
+        pendingBaudRate_ = 0;
         emit frameError(tr("命令 0x%1 等待 ACK 超时").arg(cmd, 4, 16, QChar('0')));
     });
 }
@@ -52,6 +71,7 @@ bool SerialTransport::open(const QString& portName, int baudRate) {
     if (!serial_.open(QIODevice::ReadWrite)) return false;
     assembler_.reset();
     pending_.clear();
+    pendingBaudRate_ = 0;
     ackTimer_.stop();
     return true;
 }
@@ -59,6 +79,7 @@ bool SerialTransport::open(const QString& portName, int baudRate) {
 void SerialTransport::close() {
     ackTimer_.stop();
     pending_.clear();
+    pendingBaudRate_ = 0;
     if (serial_.isOpen()) serial_.close();
 }
 
@@ -92,11 +113,13 @@ bool SerialTransport::startSequence(std::vector<PendingCommand> commands) {
 void SerialTransport::sendNext() {
     if (pending_.empty()) {
         ackTimer_.stop();
+        onSequenceFinished();
         return;
     }
     const PendingCommand& cmd = pending_.front();
     if (!sendCommand(cmd.command, cmd.value)) {
         pending_.clear();
+        pendingBaudRate_ = 0;
         emit frameError(tr("命令写入失败"));
         return;
     }
@@ -117,6 +140,38 @@ bool SerialTransport::queryParameters() {
         {Command::GetTargetParams, {}},
         {Command::GetSensitivity, {}},
         {Command::EndConfig, {}},
+    });
+}
+
+bool SerialTransport::setBaudRate(int baudRate) {
+    const int index = baudIndex(baudRate);
+    if (index == 0 || !serial_.isOpen()) return false;
+    pendingBaudRate_ = baudRate;
+    const auto lo = static_cast<std::uint8_t>(index & 0xFF);
+    const auto hi = static_cast<std::uint8_t>((index >> 8) & 0xFF);
+    if (!startSequence({
+            {Command::EnableConfig, {0x01, 0x00}},
+            {Command::SetBaudRate, {lo, hi}},
+            {Command::Restart, {}}, // 协议 §5.8：新波特率重启后生效
+        })) {
+        pendingBaudRate_ = 0;
+        return false;
+    }
+    return true;
+}
+
+void SerialTransport::onSequenceFinished() {
+    if (pendingBaudRate_ == 0) return;
+    const int baud = pendingBaudRate_;
+    pendingBaudRate_ = 0;
+    // 模块在重启 ACK 发送完成后自动重启，等待其就绪再切换本地波特率
+    QTimer::singleShot(800, this, [this, baud] {
+        if (!serial_.isOpen()) return;
+        if (!serial_.setBaudRate(baud)) {
+            emit frameError(tr("本地波特率切换失败：%1").arg(serial_.errorString()));
+            return;
+        }
+        emit baudRateChanged(baud);
     });
 }
 
@@ -156,6 +211,7 @@ void SerialTransport::onFrame(FrameKind kind, const std::uint8_t* data, std::siz
                 static_cast<std::uint16_t>(pending_.front().command) | 0x0100u;
             if (!ack.success || ack.command != expected) {
                 pending_.clear();
+                pendingBaudRate_ = 0;
                 emit frameError(tr("命令 ACK 异常：0x%1")
                                     .arg(ack.command, 4, 16, QChar('0')));
             } else {

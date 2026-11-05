@@ -138,6 +138,11 @@ int main() {
         CHECK(end == expectedEnd, "end-config command frame mismatch");
         CHECK(frameKind(end.data(), end.size()) == FrameKind::Command, "command kind mismatch");
         CHECK(verifyTail(FrameKind::Command, end.data(), end.size()), "command tail should match");
+
+        // 协议 §5.8：索引 0x0007 → 256000
+        auto baud = buildCommand(static_cast<std::uint16_t>(Command::SetBaudRate), {0x07, 0x00});
+        auto expectedBaud = hexBytes("FD FC FB FA 04 00 A1 00 07 00 04 03 02 01");
+        CHECK(baud == expectedBaud, "set-baud command frame mismatch");
     }
 
     // 5. ACK 帧解析（协议 §5.7 固件版本；文档长度字段 0x0B 疑为笔误，此处按实际 12 字节构造）

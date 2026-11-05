@@ -85,7 +85,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolbar->addSeparator();
     toolbar->addWidget(mirrorCombo_);
     toolbar->addWidget(sizeCombo_);
-    setConnectedUi(false);
 
     demoTimer_ = new QTimer(this);
     demoTimer_->setInterval(100);
@@ -100,6 +99,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     rangeCombo_->setCurrentText(QStringLiteral("30 m"));
     rangeCombo_->setToolTip(tr("视图量程（半径），协议距离上限 100 m"));
+
+    targetBaudCombo_ = new QComboBox(this);
+    const int targetBauds[] = {9600, 19200, 38400, 57600, 115200, 230400, 256000, 460800};
+    for (int b : targetBauds) {
+        targetBaudCombo_->addItem(QString::number(b), b);
+    }
+    targetBaudCombo_->setCurrentText(QStringLiteral("115200"));
+    applyBaudButton_ = new QPushButton(tr("应用"), this);
+    applyBaudButton_->setToolTip(tr("使能配置 → 设置波特率 → 重启模块，随后软件本地同步切换"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
@@ -129,6 +137,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* dockLayout = new QVBoxLayout(dockWidget);
     dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
     dockLayout->addWidget(rangeCombo_);
+    dockLayout->addSpacing(10);
+    dockLayout->addWidget(new QLabel(tr("模块波特率"), dockWidget));
+    auto* baudRow = new QHBoxLayout();
+    baudRow->addWidget(targetBaudCombo_, 1);
+    baudRow->addWidget(applyBaudButton_);
+    dockLayout->addLayout(baudRow);
     dockLayout->addSpacing(10);
     dockLayout->addWidget(new QLabel(tr("显示"), dockWidget));
     auto* vectorRow = new QHBoxLayout();
@@ -160,6 +174,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     paramsLabel_->adjustSize();
     setStatus(tr("未连接"));
 
+    setConnectedUi(false);
     refreshPorts();
 
     connect(connectButton_, &QPushButton::clicked, this, &MainWindow::onConnectClicked);
@@ -167,6 +182,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshPorts);
     connect(versionButton_, &QPushButton::clicked, this, &MainWindow::onQueryVersionClicked);
     connect(paramsButton_, &QPushButton::clicked, this, &MainWindow::onQueryParamsClicked);
+    connect(applyBaudButton_, &QPushButton::clicked, this, &MainWindow::onApplyBaudClicked);
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setPointRadius(sizeCombo_->currentData().toDouble());
     });
@@ -210,6 +226,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             [this](quint16 cmd, bool ok, const QByteArray& payload) {
                 onAck(cmd, ok, payload);
             });
+    connect(transport_, &SerialTransport::baudRateChanged, this, [this](int baud) {
+        const int idx = baudCombo_->findData(baud);
+        if (idx >= 0) baudCombo_->setCurrentIndex(idx);
+        setStatus(tr("波特率已同步为 %1").arg(baud));
+    });
     connect(transport_, &SerialTransport::frameError, this,
             [this](const QString& msg) { setStatus(msg); });
 }
@@ -219,6 +240,7 @@ void MainWindow::setConnectedUi(bool connected) {
     disconnectButton_->setEnabled(connected);
     versionButton_->setEnabled(connected);
     paramsButton_->setEnabled(connected);
+    applyBaudButton_->setEnabled(connected);
 }
 
 void MainWindow::setStatus(const QString& text, bool alarm) {
@@ -253,6 +275,7 @@ void MainWindow::onConnectClicked() {
     const int baud = baudCombo_->currentData().toInt();
     if (transport_->open(port, baud)) {
         setConnectedUi(true);
+        targetBaudCombo_->setCurrentIndex(baudCombo_->currentIndex());
         setStatus(tr("已连接 %1 @ %2").arg(port).arg(baud));
     } else {
         setStatus(tr("打开失败：%1").arg(transport_->errorString()));
@@ -275,6 +298,19 @@ void MainWindow::onQueryVersionClicked() {
 void MainWindow::onQueryParamsClicked() {
     if (!transport_->isOpen()) return;
     setStatus(transport_->queryParameters() ? tr("读取模块参数…") : tr("命令发送失败"));
+}
+
+void MainWindow::onApplyBaudClicked() {
+    if (!transport_->isOpen()) return;
+    const int target = targetBaudCombo_->currentData().toInt();
+    const int current = baudCombo_->currentData().toInt();
+    if (target == current) {
+        setStatus(tr("模块已是 %1，无需修改").arg(target));
+        return;
+    }
+    setStatus(transport_->setBaudRate(target)
+                  ? tr("正在设置模块波特率为 %1…").arg(target)
+                  : tr("不支持该波特率或流程进行中"));
 }
 
 void MainWindow::startDemo() {
@@ -401,6 +437,12 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
     }
     case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
         setStatus(tr("配置模式已使能，等待查询…"));
+        break;
+    case 0x00A1:
+        setStatus(tr("波特率已写入，等待模块重启…"));
+        break;
+    case 0x00A3:
+        setStatus(tr("模块重启中，即将同步本地波特率…"));
         break;
     default:
         break; // 结束配置等 ACK 无需提示

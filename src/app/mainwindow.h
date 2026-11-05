@@ -35,6 +35,7 @@ private slots:
     void refreshPorts();
     void onQueryVersionClicked();
     void onQueryParamsClicked();
+    void onApplyBaudClicked();
     void onDemoTick();
 
 private:
@@ -53,6 +54,8 @@ private:
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* rangeCombo_ = nullptr;
     QComboBox* mirrorCombo_ = nullptr;
+    QComboBox* targetBaudCombo_ = nullptr;
+    QPushButton* applyBaudButton_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
