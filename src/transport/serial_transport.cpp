@@ -77,12 +77,6 @@ bool SerialTransport::queryParameters() {
            sendCommand(Command::EndConfig);
 }
 
-bool SerialTransport::restartModule() {
-    // 重启后模块自动恢复工作模式，无需再发结束配置命令。
-    return sendCommand(Command::EnableConfig, {0x01, 0x00}) &&
-           sendCommand(Command::Restart);
-}
-
 void SerialTransport::onReadyRead() {
     const QByteArray data = serial_.readAll();
     if (data.isEmpty()) return;

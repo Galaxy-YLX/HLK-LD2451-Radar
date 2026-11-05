@@ -34,7 +34,6 @@ private slots:
     void refreshPorts();
     void onQueryVersionClicked();
     void onQueryParamsClicked();
-    void onRestartClicked();
     void onDemoTick();
 
 private:
@@ -56,7 +55,6 @@ private:
     QComboBox* directionCombo_ = nullptr;
     QPushButton* versionButton_ = nullptr;
     QPushButton* paramsButton_ = nullptr;
-    QPushButton* restartButton_ = nullptr;
     QLabel* versionLabel_ = nullptr;
     QLabel* paramsLabel_ = nullptr;
     QCheckBox* vectorsCheck_ = nullptr;

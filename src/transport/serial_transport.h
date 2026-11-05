@@ -37,7 +37,6 @@ public:
     // 以下方法把整条流程一次发出，雷达会按字节流顺序依次回 ACK。
     bool queryFirmwareVersion();
     bool queryParameters();
-    bool restartModule();
 
 signals:
     void scanReady(const std::shared_ptr<ld2451::Scan>& scan);

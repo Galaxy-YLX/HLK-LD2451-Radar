@@ -72,14 +72,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     barFont.setPointSize(12);
     toolbar->setFont(barFont);
 
-    // 「读取版本 / 读取参数」放入上边栏；「重启模块」保留在侧边控制面板
+    // 模块命令按钮（读取版本 / 读取参数）放入上边栏
     versionButton_ = new QPushButton(tr("读取版本"), this);
     paramsButton_ = new QPushButton(tr("读取参数"), this);
-    restartButton_ = new QPushButton(tr("重启模块"), this);
-    QFont sideFont = versionButton_->font();
-    sideFont.setPointSize(14);
-    sideFont.setBold(true);
-    restartButton_->setFont(sideFont);
     versionButton_->setFont(barFont);
     paramsButton_->setFont(barFont);
     versionButton_->setToolTip(tr("使能配置 → 读取固件版本 → 结束配置"));
@@ -129,8 +124,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     controlDock->setTitleBarWidget(new QWidget(controlDock));
     auto* dockWidget = new QWidget(controlDock);
     auto* dockLayout = new QVBoxLayout(dockWidget);
-    dockLayout->addWidget(restartButton_);
-    dockLayout->addSpacing(8);
     dockLayout->addWidget(new QLabel(tr("量程"), dockWidget));
     dockLayout->addWidget(rangeCombo_);
     dockLayout->addSpacing(10);
@@ -167,7 +160,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshPorts);
     connect(versionButton_, &QPushButton::clicked, this, &MainWindow::onQueryVersionClicked);
     connect(paramsButton_, &QPushButton::clicked, this, &MainWindow::onQueryParamsClicked);
-    connect(restartButton_, &QPushButton::clicked, this, &MainWindow::onRestartClicked);
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         view_->setPointRadius(sizeCombo_->currentData().toDouble());
     });
@@ -225,7 +217,6 @@ void MainWindow::setConnectedUi(bool connected) {
     disconnectButton_->setEnabled(connected);
     versionButton_->setEnabled(connected);
     paramsButton_->setEnabled(connected);
-    restartButton_->setEnabled(connected);
 }
 
 void MainWindow::setStatus(const QString& text, bool alarm) {
@@ -283,11 +274,6 @@ void MainWindow::onQueryVersionClicked() {
 void MainWindow::onQueryParamsClicked() {
     if (!transport_->isOpen()) return;
     setStatus(transport_->queryParameters() ? tr("读取模块参数…") : tr("命令发送失败"));
-}
-
-void MainWindow::onRestartClicked() {
-    if (!transport_->isOpen()) return;
-    setStatus(transport_->restartModule() ? tr("模块重启中…") : tr("命令发送失败"));
 }
 
 void MainWindow::startDemo() {
@@ -415,9 +401,6 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("灵敏度参数已读取"));
         break;
     }
-    case 0x00A3:
-        setStatus(tr("模块已重启"));
-        break;
     default:
         break; // 使能配置 / 结束配置的 ACK 无需提示
     }
