@@ -124,6 +124,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int n = 1; n <= 10; ++n) {
         triggerCombo_->addItem(tr("%1 次").arg(n), n);
     }
+    // 初始值固定为 1 次；按值查找，避免依赖选项顺序
+    constexpr int kDefaultTriggerCount = 1;
+    const int defaultTriggerIdx = triggerCombo_->findData(kDefaultTriggerCount);
+    if (defaultTriggerIdx >= 0) triggerCombo_->setCurrentIndex(defaultTriggerIdx);
     triggerCombo_->setToolTip(tr("协议 0x0003 第 1 字节：连续检测次数满足才上报报警（1~10 次）"));
 
     vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
