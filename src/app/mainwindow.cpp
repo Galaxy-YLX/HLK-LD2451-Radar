@@ -39,7 +39,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int b : bauds) {
         baudCombo_->addItem(QString::number(b), b);
     }
-    baudCombo_->setCurrentText(QStringLiteral("115200"));
+    baudCombo_->setCurrentText(QStringLiteral("460800"));
 
     connectButton_ = new QPushButton(tr("连接"), this);
     disconnectButton_ = new QPushButton(tr("断开"), this);
@@ -105,7 +105,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int b : targetBauds) {
         targetBaudCombo_->addItem(QString::number(b), b);
     }
-    targetBaudCombo_->setCurrentText(QStringLiteral("115200"));
+    targetBaudCombo_->setCurrentText(QStringLiteral("460800"));
     applyBaudButton_ = new QPushButton(tr("应用"), this);
     applyBaudButton_->setToolTip(tr("使能配置 → 设置波特率 → 重启模块，随后软件本地同步切换"));
 

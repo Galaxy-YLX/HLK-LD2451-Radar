@@ -31,7 +31,7 @@ public:
     static QStringList availablePorts();
 
     // 打开串口，返回是否成功；失败时用 errorString() 取原因。
-    bool open(const QString& portName, int baudRate = 115200);
+    bool open(const QString& portName, int baudRate = 460800);
     void close();
     bool isOpen() const;
     QString errorString() const;
