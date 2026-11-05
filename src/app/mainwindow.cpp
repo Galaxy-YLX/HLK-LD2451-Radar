@@ -154,6 +154,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     paramsLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
     paramsLabel_->setStyleSheet(hudStyle);
     paramsLabel_->move(8, 50);
+    versionLabel_->show();
+    paramsLabel_->show();
     versionLabel_->adjustSize();
     paramsLabel_->adjustSize();
     setStatus(tr("未连接"));
@@ -397,8 +399,11 @@ void MainWindow::onAck(quint16 command, bool success, const QByteArray& payload)
         setStatus(tr("灵敏度参数已读取"));
         break;
     }
+    case 0x00FF: // 使能配置 ACK：给出中间反馈，便于判断模块是否有响应
+        setStatus(tr("配置模式已使能，等待查询…"));
+        break;
     default:
-        break; // 使能配置 / 结束配置的 ACK 无需提示
+        break; // 结束配置等 ACK 无需提示
     }
     versionLabel_->adjustSize();
     paramsLabel_->adjustSize();

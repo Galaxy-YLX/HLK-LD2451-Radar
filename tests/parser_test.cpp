@@ -170,6 +170,24 @@ int main() {
         CHECK(count == 1, "assembler should recover exactly 1 ACK frame, got %d", count);
     }
 
+    // 5c. 「读取参数」按钮依赖的两条查询 ACK（协议 §5.4 / §5.6）
+    {
+        auto fr = hexBytes("FD FC FB FA 08 00 12 01 00 00 64 01 05 02 04 03 02 01");
+        Ack ack;
+        CHECK(parseAckFrame(fr.data(), fr.size(), ack) && ack.command == 0x0112 &&
+                  ack.success && ack.payload.size() == 4,
+              "target-params ACK should parse with 4-byte payload");
+        CHECK(ack.payload[0] == 0x64 && ack.payload[1] == 0x01 &&
+                  ack.payload[2] == 0x05 && ack.payload[3] == 0x02,
+              "target-params ACK payload mismatch");
+
+        auto fr2 = hexBytes("FD FC FB FA 08 00 13 01 00 00 01 00 00 00 04 03 02 01");
+        Ack ack2;
+        CHECK(parseAckFrame(fr2.data(), fr2.size(), ack2) && ack2.command == 0x0113 &&
+                  ack2.success && ack2.payload.size() == 4 && ack2.payload[0] == 0x01,
+              "sensitivity ACK should parse");
+    }
+
     // 6. 组帧器：垃圾字节 + 分片喂入 + 连续两帧
     {
         auto data = hexBytes(kExampleFrame);

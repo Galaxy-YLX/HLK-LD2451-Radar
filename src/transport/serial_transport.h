@@ -4,10 +4,13 @@
 #include <QObject>
 #include <QSerialPort>
 #include <QStringList>
+#include <QTimer>
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "core/scan.h"
@@ -33,8 +36,8 @@ public:
     bool isOpen() const;
     QString errorString() const;
 
-    // 协议 §3：配置/查询命令必须夹在「使能配置」与「结束配置」之间。
-    // 以下方法把整条流程一次发出，雷达会按字节流顺序依次回 ACK。
+    // 协议 §3：使能配置 → 查询命令 → 结束配置。
+    // 严格按「发一条、等该条 ACK 成功、再发下一条」执行，并带 ACK 超时保护。
     bool queryFirmwareVersion();
     bool queryParameters();
 
@@ -47,11 +50,20 @@ private slots:
     void onReadyRead();
 
 private:
+    struct PendingCommand {
+        Command command;
+        std::vector<std::uint8_t> value;
+    };
+
     void onFrame(FrameKind kind, const std::uint8_t* data, std::size_t len);
     bool sendCommand(Command command, const std::vector<std::uint8_t>& value = {});
+    bool startSequence(std::vector<PendingCommand> commands);
+    void sendNext();
 
     QSerialPort serial_;
     FrameAssembler assembler_;
+    std::deque<PendingCommand> pending_;
+    QTimer ackTimer_; // 单发超时：等待当前命令的 ACK
 };
 
 } // namespace ld2451

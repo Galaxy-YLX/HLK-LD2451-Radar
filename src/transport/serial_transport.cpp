@@ -21,6 +21,16 @@ SerialTransport::SerialTransport(QObject* parent)
                     emit frameError(serial_.errorString());
                 }
             });
+
+    // 一问一答流程中，某条命令迟迟没有 ACK 时给出明确提示并中止队列
+    ackTimer_.setSingleShot(true);
+    ackTimer_.setInterval(1000);
+    connect(&ackTimer_, &QTimer::timeout, this, [this] {
+        if (pending_.empty()) return;
+        const auto cmd = static_cast<std::uint16_t>(pending_.front().command);
+        pending_.clear();
+        emit frameError(tr("命令 0x%1 等待 ACK 超时").arg(cmd, 4, 16, QChar('0')));
+    });
 }
 
 SerialTransport::~SerialTransport() {
@@ -41,10 +51,14 @@ bool SerialTransport::open(const QString& portName, int baudRate) {
     serial_.setBaudRate(baudRate);
     if (!serial_.open(QIODevice::ReadWrite)) return false;
     assembler_.reset();
+    pending_.clear();
+    ackTimer_.stop();
     return true;
 }
 
 void SerialTransport::close() {
+    ackTimer_.stop();
+    pending_.clear();
     if (serial_.isOpen()) serial_.close();
 }
 
@@ -64,17 +78,46 @@ bool SerialTransport::sendCommand(Command command,
     return serial_.write(reinterpret_cast<const char*>(frame.data()), size) == size;
 }
 
+bool SerialTransport::startSequence(std::vector<PendingCommand> commands) {
+    if (!serial_.isOpen() || commands.empty()) return false;
+    if (!pending_.empty()) return false; // 上一条流程尚未走完，避免中途打断
+    pending_.clear();
+    for (auto& c : commands) {
+        pending_.push_back(std::move(c));
+    }
+    sendNext();
+    return true;
+}
+
+void SerialTransport::sendNext() {
+    if (pending_.empty()) {
+        ackTimer_.stop();
+        return;
+    }
+    const PendingCommand& cmd = pending_.front();
+    if (!sendCommand(cmd.command, cmd.value)) {
+        pending_.clear();
+        emit frameError(tr("命令写入失败"));
+        return;
+    }
+    ackTimer_.start();
+}
+
 bool SerialTransport::queryFirmwareVersion() {
-    return sendCommand(Command::EnableConfig, {0x01, 0x00}) &&
-           sendCommand(Command::GetFirmwareVersion) &&
-           sendCommand(Command::EndConfig);
+    return startSequence({
+        {Command::EnableConfig, {0x01, 0x00}},
+        {Command::GetFirmwareVersion, {}},
+        {Command::EndConfig, {}},
+    });
 }
 
 bool SerialTransport::queryParameters() {
-    return sendCommand(Command::EnableConfig, {0x01, 0x00}) &&
-           sendCommand(Command::GetTargetParams) &&
-           sendCommand(Command::GetSensitivity) &&
-           sendCommand(Command::EndConfig);
+    return startSequence({
+        {Command::EnableConfig, {0x01, 0x00}},
+        {Command::GetTargetParams, {}},
+        {Command::GetSensitivity, {}},
+        {Command::EndConfig, {}},
+    });
 }
 
 void SerialTransport::onReadyRead() {
@@ -105,6 +148,21 @@ void SerialTransport::onFrame(FrameKind kind, const std::uint8_t* data, std::siz
             reinterpret_cast<const char*>(ack.payload.data()),
             static_cast<int>(ack.payload.size()));
         emit ackReady(ack.command, ack.success, payload);
+
+        // 推进一问一答队列：只有当前命令的 ACK 成功，才发下一条
+        if (!pending_.empty()) {
+            ackTimer_.stop();
+            const auto expected =
+                static_cast<std::uint16_t>(pending_.front().command) | 0x0100u;
+            if (!ack.success || ack.command != expected) {
+                pending_.clear();
+                emit frameError(tr("命令 ACK 异常：0x%1")
+                                    .arg(ack.command, 4, 16, QChar('0')));
+            } else {
+                pending_.pop_front();
+                sendNext();
+            }
+        }
         break;
     }
     case FrameKind::Invalid:
