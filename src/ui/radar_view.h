@@ -16,7 +16,7 @@ namespace ld2451 {
 // 2D 极坐标目标视图：按 LD2451 真实波束画 ±15° 扇形，雷达位于底部中心，
 // 0° 为正前方（向上）。与 EaiLidar Viewer 的 ScanView 同一套方案：绿黑主题、
 // 距离弧/标尺、镜像适配安装方位、可调点大小、余辉控制。目标按运动方向
-// 着色，并绘制速度矢量与数值标签；超出波束的目标不在视图中绘制。
+// 着色，并绘制速度线段与数值标签；超出波束的目标不在视图中绘制。
 class RadarView : public QWidget {
     Q_OBJECT
 public:
@@ -46,7 +46,7 @@ public:
     void setSnrFilter(bool enable, int min_snr);
     // 余辉控制：目标轨迹保留指定秒数后清除（默认关，保留 2 s）
     void setPersistence(bool enable, int seconds);
-    // 速度矢量 / 数值标签显示开关
+    // 速度线段 / 数值标签显示开关
     void setShowVectors(bool show);
     void setShowLabels(bool show);
     // 方向定义：协议 §6.2 字段定义 / §7 示例解析（实测后可切换）

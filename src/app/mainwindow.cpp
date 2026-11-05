@@ -118,7 +118,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     persistenceSpin_->setRange(1, 20);
     persistenceSpin_->setValue(2);
     persistenceSpin_->setSuffix(tr(" s"));
-    vectorsCheck_ = new QCheckBox(tr("速度矢量"), this);
+    vectorsCheck_ = new QCheckBox(tr("速度线段"), this);
     vectorsCheck_->setChecked(true);
     labelsCheck_ = new QCheckBox(tr("数值标签"), this);
     labelsCheck_->setChecked(true);

@@ -267,25 +267,17 @@ void RadarView::paintEvent(QPaintEvent* event) {
         const QColor color = approaching ? kApproachColor : kLeaveColor;
         const QPointF pos = toScreen(t.x_m, t.y_m);
 
-        // 速度矢量：靠近指向雷达，远离指向外；长度随速度幅值。
-        // 终点在世界坐标中计算，保证镜像时箭头方向仍与目标一致。
+        // 速度线段：长度表示速度大小，靠近指向雷达、远离指向外；不绘制箭头。
+        // 终点在世界坐标中计算，保证镜像时线段方向仍与目标一致。
         if (show_vectors_ && t.speed_kmh > 0.0) {
             const double rad = t.angle_deg * kPi / 180.0;
-            const double arrow_m =
+            const double line_m =
                 (8.0 + 40.0 * std::min(t.speed_kmh, 120.0) / 120.0) / scale;
             const double sign = approaching ? -1.0 : 1.0;
-            const QPointF tip = toScreen(t.x_m + sign * arrow_m * std::sin(rad),
-                                         t.y_m + sign * arrow_m * std::cos(rad));
-            const QPointF delta = tip - pos;
-            const double len = std::hypot(delta.x(), delta.y());
+            const QPointF end = toScreen(t.x_m + sign * line_m * std::sin(rad),
+                                         t.y_m + sign * line_m * std::cos(rad));
             p.setPen(QPen(color, 1.5));
-            p.drawLine(pos, tip);
-            if (len > 1e-3) {
-                const QPointF u = delta / len;
-                const QPointF n(-u.y(), u.x());
-                p.drawLine(tip, tip - u * 7.0 + n * 3.5);
-                p.drawLine(tip, tip - u * 7.0 - n * 3.5);
-            }
+            p.drawLine(pos, end);
         }
 
         // 目标点；报警时靠近目标加红圈
